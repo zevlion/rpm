@@ -1,0 +1,33 @@
+{
+  "name": "rpm2-Development",
+  "image": "mcr.microsoft.com/devcontainers/rust:1-bookworm",
+
+  "remoteEnv": {
+    "LOCAL_WORKSPACE_FOLDER": "${localWorkspaceFolder}",
+  },
+
+  "mounts": [
+    "source=${localEnv:HOME}/.gitconfig,target=/root/.gitconfig,type=bind,consistency=cached",
+    "source=${localEnv:HOME}/.gnupg,target=/root/.gnupg,type=bind,consistency=cached",
+  ],
+
+  "runArgs": [
+    "-v",
+    "/run/user/1000/gnupg/S.gpg-agent:/root/.gnupg/S.gpg-agent",
+  ],
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "rust-lang.rust-analyzer",
+        "tamasfe.even-better-toml",
+        "serayuzgur.crates",
+      ],
+      "settings": {
+        "rust-analyzer.check.command": "clippy",
+      },
+    },
+  },
+
+  "remoteUser": "root",
+}
