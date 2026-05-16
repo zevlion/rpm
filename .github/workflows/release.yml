@@ -1,0 +1,49 @@
+name: release
+
+on:
+    push:
+        branches:
+            - master
+
+jobs:
+    build:
+        runs-on: ubuntu-latest
+
+        permissions:
+            contents: write
+
+        steps:
+            - name: checkout
+              uses: actions/checkout@v4
+
+            - name: install rust
+              uses: dtolnay/rust-toolchain@stable
+
+            - name: cache
+              uses: Swatinem/rust-cache@v2
+
+            - name: build
+              run: cargo build --release
+
+            - name: get commit info
+              id: commit
+              run: |
+                  echo "sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+                  echo "msg=$(git log -1 --pretty=%s)" >> $GITHUB_OUTPUT
+
+            - name: delete existing release
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: |
+                  gh release delete latest --yes 2>/dev/null || true
+                  git push origin :refs/tags/latest 2>/dev/null || true
+
+            - name: create release
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: |
+                  gh release create latest \
+                    ./target/release/rpm2 \
+                    --title "rpm2 — ${{ steps.commit.outputs.sha }}" \
+                    --notes "${{ steps.commit.outputs.msg }}" \
+                    --latest
