@@ -6,6 +6,14 @@ The daemon starts automatically on first use and runs in the background. The CLI
 
 ---
 
+## Installation
+
+```bash
+curl -L https://github.com/zevlion/rpm2/releases/download/latest/rpm2 -o rpm2 && \
+chmod +x rpm2 && \
+sudo mv rpm2 /usr/local/bin/rpm2
+```
+
 ## Commands
 
 ```bash
