@@ -1,75 +1,42 @@
-# rpm2: Process Manager
+# rpm2 — Rust Process Manager
 
-## Project Overview
+A lightweight native alternative to PM2. Single binary, zero runtime overhead, no Node.js required.
 
-**rpm2** (Rust Process Manager 2) is a lightweight process orchestrator provides a native alternative to Node.js-based managers like PM2. Built entirely in Rust, it uses asynchronous system calls to manage background services with near-zero overhead.
-
----
-
-## Architecture
-
-### 1. The Core Philosophy
-
-The primary objective of `rpm2` is **minimalism and reliability**. Traditional process managers often introduce significant memory overhead because they require a runtime (like V8) to stay resident in memory. `rpm2` compiles to a single native binary, utilizing the operating system's native process management capabilities directly.
-
-### 2. Client-Daemon Model
-
-`rpm2` operates as two distinct logical entities within the same binary:
-
-#### A. The Background Daemon (`rpm2 daemon`)
-
-The daemon is the "Source of Truth." It:
-
-- Creates and listens on a Unix Domain Socket (`/tmp/rpm2.sock`).
-- Manages an internal Registry of all child processes.
-- Monitors the health and exit codes of managed applications.
-- Routes standard I/O to defined log locations (Planned).
-
-#### B. The CLI Client (`rpm2 start`, `rpm2 list`, etc.)
-
-The CLI is a transient interface. It:
-
-- Parses user input using the `clap` crate.
-- Serializes commands into a shared IPC (Inter-Process Communication) format.
-- Communicates with the daemon over the socket.
-- Renders the daemon's response in a human-readable format.
+The daemon starts automatically on first use and runs in the background. The CLI connects to it over a Unix socket, sends a command, and exits. All process state lives in the daemon.
 
 ---
 
-## Technical Components
+## Commands
 
-### Asynchronous Runtime
+```bash
+rpm2 start <cmd> [flags]   # start a process
+rpm2 stop <id|name>        # stop a process
+rpm2 restart <id|name>     # restart a process
+rpm2 delete <id|name|all>  # delete a process
+rpm2 ls                    # list all processes
+rpm2 tui                   # open the terminal UI
+rpm2 kill                  # stop the daemon
+```
 
-We use **Tokio** to handle concurrency. This allows the daemon to handle multiple CLI requests and monitor multiple child processes simultaneously without blocking the main execution thread.
+## Start Flags
 
-### IPC Protocol (JSON over Unix Sockets)
+```bash
+-n, --name <name>          # process name (default: binary name)
+-w, --watch                # auto-restart on crash
+-a, --attach               # attach stdout to terminal
+-i, --interpreter <bin>    # interpreter e.g. node, python3
+    --force                # restart if already running
+```
 
-Communication is strictly typed using Rust enums. We define an `IpcCommand` enum for requests and an `IpcResponse` enum for replies. This ensures that the client and daemon are always in sync regarding the data format, preventing crashes due to malformed messages.
+## Examples
 
-### Process Tracking
-
-Each managed process is assigned:
-
-- **ID:** A unique integer for easy CLI interaction.
-- **Name:** A user-defined string for identification.
-- **PID:** The actual OS Process ID used for signaling (SIGTERM/SIGKILL).
-- **Status:** A state indicator (e.g., Online, Stopped, Errored).
-
----
-
-## Design Goals
-
-1. **Low Footprint:** Aim for < 10MB RAM usage for the daemon.
-2. **Speed:** Instantaneous command execution via Unix Sockets.
-3. **Safety:** Use Rust's ownership model to prevent race conditions in process state management.
-4. **Portability:** Initially targeting Linux/macOS with future Windows support via Named Pipes.
-
----
-
-## Development Environment
-
-The project includes a specialized `.devcontainer` configuration based on `Debian Bookworm`. This environment comes pre-configured with:
-
-- The Rust toolchain (Cargo, Rustc).
-- `rust-analyzer` for IDE intelligence.
-- Common system utilities (`curl`, `python3`, `bun`) for testing various process types.
+```bash
+rpm2 start ./server --name api --watch
+rpm2 start app.js --interpreter node --name frontend
+rpm2 start script.py --interpreter python3 -w
+rpm2 stop api
+rpm2 restart 0
+rpm2 delete all
+rpm2 ls
+rpm2 tui
+```
