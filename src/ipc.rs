@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Local};
 
 pub const SOCKET_PATH: &str = "/tmp/rpm2.sock";
 

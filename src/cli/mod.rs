@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand};
 
 #[derive(Parser, Debug)]
-#[command(name = "rpm2", version, about = "Native process manager written in Rust")]
+#[command(name = "rpm2", version, about = "Process Manager")]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,
