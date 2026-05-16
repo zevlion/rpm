@@ -20,6 +20,8 @@ async fn main() -> Result<()> {
         Some("start") => {
             let mut client = ensure_daemon().await?;
             let opts = parse_start(&args[2..])?;
+            let attach = opts.attach;
+
             let res = client
                 .send(DaemonCommand::Start {
                     name: opts.name,
@@ -27,12 +29,28 @@ async fn main() -> Result<()> {
                     args: opts.args,
                     watching: opts.watch,
                     interpreter: opts.interpreter,
-                    attach: opts.attach,
+                    attach,
                 })
                 .await?;
-            handle_response(res);
-        }
 
+            match res {
+                ipc::messages::DaemonResponse::Ok if attach => {
+                    // stream lines until Eof
+                    loop {
+                        match client.recv().await? {
+                            ipc::messages::DaemonResponse::Line(line) => println!("{}", line),
+                            ipc::messages::DaemonResponse::Eof => break,
+                            ipc::messages::DaemonResponse::Err(e) => {
+                                eprintln!("✗ {}", e);
+                                break;
+                            }
+                            _ => break,
+                        }
+                    }
+                }
+                other => handle_response(other),
+            }
+        }
         Some("stop") => {
             let target = args
                 .get(2)
@@ -205,9 +223,10 @@ fn handle_response(res: ipc::messages::DaemonResponse) {
         ipc::messages::DaemonResponse::Ok => println!("✓ ok"),
         ipc::messages::DaemonResponse::Err(e) => eprintln!("✗ {}", e),
         ipc::messages::DaemonResponse::ProcessList(list) => print_table(&list),
+        ipc::messages::DaemonResponse::Line(line) => println!("{}", line),
+        ipc::messages::DaemonResponse::Eof => {}
     }
 }
-
 fn print_list(res: ipc::messages::DaemonResponse) {
     match res {
         ipc::messages::DaemonResponse::ProcessList(list) => print_table(&list),
@@ -217,33 +236,90 @@ fn print_list(res: ipc::messages::DaemonResponse) {
 }
 
 fn print_table(processes: &[process::Process]) {
+    // column widths
+    let col = [4, 16, 7, 6, 8, 10, 10, 6, 4];
+    let headers = [
+        "id", "name", "pid", "cpu%", "mem", "uptime", "status", "watch", "↺",
+    ];
+
+    let total: usize = col.iter().sum::<usize>() + col.len() * 3 + 1;
+
+    // top border
+    print!("┌");
+    for (i, w) in col.iter().enumerate() {
+        print!("{}", "─".repeat(w + 2));
+        if i < col.len() - 1 {
+            print!("┬");
+        }
+    }
+    println!("┐");
+
+    // header row
+    print!("│");
+    for (i, h) in headers.iter().enumerate() {
+        print!(" {:<width$} │", h, width = col[i]);
+    }
+    println!();
+
+    // header separator
+    print!("├");
+    for (i, w) in col.iter().enumerate() {
+        print!("{}", "─".repeat(w + 2));
+        if i < col.len() - 1 {
+            print!("┼");
+        }
+    }
+    println!("┤");
+
     if processes.is_empty() {
-        println!("no processes running.");
-        return;
-    }
-    println!(
-        "\n{:<4} {:<16} {:<7} {:<6} {:<8} {:<10} {:<10} {:<6} {:<4}",
-        "id", "name", "pid", "cpu%", "mem", "uptime", "status", "watch", "↺"
-    );
-    println!("{}", "─".repeat(80));
-    for p in processes {
-        let status = match p.status {
-            process::ProcessStatus::Online => "● online",
-            process::ProcessStatus::Stopped => "○ stopped",
-        };
-        println!(
-            "{:<4} {:<16} {:<7} {:<6} {:<8} {:<10} {:<10} {:<6} {:<4}",
-            p.id,
-            p.name,
-            p.pid.map(|p| p.to_string()).unwrap_or("-".into()),
-            format!("{:.1}", p.cpu),
-            p.format_mem(),
-            p.format_uptime(),
-            status,
-            if p.watching { "yes" } else { "no" },
-            p.restarts,
+        print!("│");
+        let inner = total - 2;
+        let msg = "no processes running";
+        let pad = (inner - msg.len()) / 2;
+        print!(
+            "{}{}{}",
+            " ".repeat(pad),
+            msg,
+            " ".repeat(inner - pad - msg.len())
         );
+        println!("│");
+    } else {
+        for p in processes {
+            let status = match p.status {
+                process::ProcessStatus::Online => "● online",
+                process::ProcessStatus::Stopped => "○ stopped",
+            };
+            print!("│");
+            print!(" {:<width$} │", p.id, width = col[0]);
+            print!(" {:<width$} │", p.name, width = col[1]);
+            print!(
+                " {:<width$} │",
+                p.pid.map(|p| p.to_string()).unwrap_or("-".into()),
+                width = col[2]
+            );
+            print!(" {:<width$} │", format!("{:.1}", p.cpu), width = col[3]);
+            print!(" {:<width$} │", p.format_mem(), width = col[4]);
+            print!(" {:<width$} │", p.format_uptime(), width = col[5]);
+            print!(" {:<width$} │", status, width = col[6]);
+            print!(
+                " {:<width$} │",
+                if p.watching { "yes" } else { "no" },
+                width = col[7]
+            );
+            print!(" {:<width$} │", p.restarts, width = col[8]);
+            println!();
+        }
     }
+
+    // bottom border
+    print!("└");
+    for (i, w) in col.iter().enumerate() {
+        print!("{}", "─".repeat(w + 2));
+        if i < col.len() - 1 {
+            print!("┴");
+        }
+    }
+    println!("┘");
     println!();
 }
 
@@ -309,4 +385,3 @@ async fn run_tui() -> Result<()> {
 
     res
 }
-

@@ -15,13 +15,13 @@ pub enum DaemonCommand {
     },
     Stop {
         target: String,
-    }, // id or name
+    },
     Restart {
         target: String,
     },
     Delete {
         target: String,
-    }, // id, name, or "all"
+    },
     Watch {
         target: String,
         enable: bool,
@@ -30,9 +30,11 @@ pub enum DaemonCommand {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(tag = "type")]
+#[serde(tag = "type", content = "data")]
 pub enum DaemonResponse {
     ProcessList(Vec<Process>),
     Ok,
     Err(String),
+    Line(String), // streaming stdout/stderr line
+    Eof,          // process exited or detached
 }
