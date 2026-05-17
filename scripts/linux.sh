@@ -3,7 +3,7 @@ if command -v rpm2 &>/dev/null; then
 else
   echo "Installing rpm2..."
 fi && \
-curl -L https://github.com/zevlion/rpm2/releases/download/latest/rpm2 -o rpm2 && \
-chmod +x rpm2 && \
-sudo mv rpm2 /usr/local/bin/rpm2 && \
-echo "Done! rpm2 $(rpm2 --version 2>/dev/null || true)"
+curl -fsSL https://github.com/zevlion/rpm2/releases/download/latest/rpm2 -o /tmp/rpm2_bin && \
+chmod +x /tmp/rpm2_bin && \
+sudo mv /tmp/rpm2_bin /usr/local/bin/rpm2 && \
+echo "Done! $(rpm2 --version 2>/dev/null || true)"
