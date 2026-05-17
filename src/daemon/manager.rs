@@ -15,6 +15,16 @@ pub struct ManagedProcess {
     pub output_tx: Option<broadcast::Sender<String>>,
 }
 
+pub struct ProcessConfig {
+    pub id: u32,
+    pub name: String,
+    pub cmd: String,
+    pub args: Vec<String>,
+    pub watching: bool,
+    pub interpreter: Option<String>,
+    pub attach: bool,
+}
+
 pub type ProcessMap = Arc<Mutex<HashMap<u32, ManagedProcess>>>;
 
 pub fn new_process_map() -> ProcessMap {
@@ -23,9 +33,10 @@ pub fn new_process_map() -> ProcessMap {
 
 fn resolve(map: &HashMap<u32, ManagedProcess>, target: &str) -> Option<u32> {
     if let Ok(id) = target.parse::<u32>()
-        && map.contains_key(&id) {
-            return Some(id);
-        }
+        && map.contains_key(&id)
+    {
+        return Some(id);
+    }
     map.values()
         .find(|e| e.process.name == target)
         .map(|e| e.process.id)
@@ -33,26 +44,20 @@ fn resolve(map: &HashMap<u32, ManagedProcess>, target: &str) -> Option<u32> {
 
 pub async fn start(
     map: &ProcessMap,
-    id: u32,
-    name: String,
-    cmd: String,
-    args: Vec<String>,
-    watching: bool,
-    interpreter: Option<String>,
-    attach: bool,
+    config: ProcessConfig,
 ) -> Result<Option<broadcast::Receiver<String>>> {
-    let mut command = match &interpreter {
+    let mut command = match &config.interpreter {
         Some(interp) => {
             let mut c = Command::new(interp);
-            c.arg(&cmd);
+            c.arg(&config.cmd);
             c
         }
-        None => Command::new(&cmd),
+        None => Command::new(&config.cmd),
     };
 
-    command.args(&args);
+    command.args(&config.args);
 
-    let (output_tx, output_rx, child) = if attach {
+    let (output_tx, output_rx, child) = if config.attach {
         command
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
@@ -60,7 +65,6 @@ pub async fn start(
         let mut child = command.spawn()?;
         let (tx, rx) = broadcast::channel(256);
 
-        // stream stdout
         if let Some(stdout) = child.stdout.take() {
             let tx2 = tx.clone();
             tokio::spawn(async move {
@@ -71,7 +75,6 @@ pub async fn start(
             });
         }
 
-        // stream stderr
         if let Some(stderr) = child.stderr.take() {
             let tx2 = tx.clone();
             tokio::spawn(async move {
@@ -96,22 +99,22 @@ pub async fn start(
     let pid = child.id();
 
     let process = Process {
-        id,
-        name,
-        cmd,
-        args,
-        interpreter,
+        id: config.id,
+        name: config.name,
+        cmd: config.cmd,
+        args: config.args,
+        interpreter: config.interpreter,
         pid,
         uptime: Duration::ZERO,
         status: ProcessStatus::Online,
         cpu: 0.0,
         mem: 0,
-        watching,
+        watching: config.watching,
         restarts: 0,
     };
 
     map.lock().await.insert(
-        id,
+        config.id,
         ManagedProcess {
             process,
             child: Some(child),

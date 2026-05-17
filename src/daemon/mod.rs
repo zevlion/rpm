@@ -1,10 +1,10 @@
 pub mod manager;
 pub mod monitor;
 
-use crate::ipc::messages::{DaemonCommand, DaemonResponse};
 use crate::ipc::SOCKET_PATH;
+use crate::ipc::messages::{DaemonCommand, DaemonResponse};
 use anyhow::Result;
-use manager::{new_process_map, ProcessMap};
+use manager::{ProcessMap, new_process_map};
 use std::sync::atomic::{AtomicU32, Ordering};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{UnixListener, UnixStream};
@@ -41,10 +41,14 @@ async fn handle_client(stream: UnixStream, map: ProcessMap) -> Result<()> {
     loop {
         line.clear();
         let n = reader.read_line(&mut line).await?;
-        if n == 0 { break; }
+        if n == 0 {
+            break;
+        }
 
         let trimmed = line.trim();
-        if trimmed.is_empty() { continue; }
+        if trimmed.is_empty() {
+            continue;
+        }
 
         let cmd: DaemonCommand = match serde_json::from_str(trimmed) {
             Ok(c) => c,
@@ -55,16 +59,28 @@ async fn handle_client(stream: UnixStream, map: ProcessMap) -> Result<()> {
         };
 
         // special case: start with attach streams lines back
-        if let DaemonCommand::Start { ref name, ref cmd, ref args, watching, ref interpreter, attach: true } = cmd {
+        if let DaemonCommand::Start {
+            ref name,
+            ref cmd,
+            ref args,
+            watching,
+            ref interpreter,
+            attach: true,
+        } = cmd
+        {
             let id = NEXT_ID.fetch_add(1, Ordering::SeqCst);
-            match manager::start(
-                &map, id,
-                name.clone(), cmd.clone(), args.clone(),
-                watching, interpreter.clone(), true,
-            ).await {
+            let config = manager::ProcessConfig {
+                id,
+                name: name.clone(),
+                cmd: cmd.clone(),
+                args: args.clone(),
+                watching,
+                interpreter: interpreter.clone(),
+                attach: true,
+            };
+            match manager::start(&map, config).await {
                 Ok(Some(mut rx)) => {
                     write_response(&mut writer, DaemonResponse::Ok).await?;
-                    // stream lines until channel closes
                     while let Ok(line) = rx.recv().await {
                         write_response(&mut writer, DaemonResponse::Line(line)).await?;
                     }
@@ -89,42 +105,50 @@ async fn handle_client(stream: UnixStream, map: ProcessMap) -> Result<()> {
 
 async fn dispatch(cmd: DaemonCommand, map: &ProcessMap) -> DaemonResponse {
     match cmd {
-        DaemonCommand::List => {
-            DaemonResponse::ProcessList(manager::list(map).await)
-        }
+        DaemonCommand::List => DaemonResponse::ProcessList(manager::list(map).await),
 
-        DaemonCommand::Start { name, cmd, args, watching, interpreter, attach } => {
+        DaemonCommand::Start {
+            name,
+            cmd,
+            args,
+            watching,
+            interpreter,
+            attach,
+        } => {
             let id = NEXT_ID.fetch_add(1, Ordering::SeqCst);
-            match manager::start(map, id, name, cmd, args, watching, interpreter, attach).await {
-                Ok(_)  => DaemonResponse::Ok,
+            let config = manager::ProcessConfig {
+                id,
+                name,
+                cmd,
+                args,
+                watching,
+                interpreter,
+                attach,
+            };
+            match manager::start(map, config).await {
+                Ok(_) => DaemonResponse::Ok,
                 Err(e) => DaemonResponse::Err(e.to_string()),
             }
         }
 
-        DaemonCommand::Stop { target } => {
-            match manager::stop(map, &target).await {
-                Ok(_)  => DaemonResponse::Ok,
-                Err(e) => DaemonResponse::Err(e.to_string()),
-            }
-        }
+        DaemonCommand::Stop { target } => match manager::stop(map, &target).await {
+            Ok(_) => DaemonResponse::Ok,
+            Err(e) => DaemonResponse::Err(e.to_string()),
+        },
 
-        DaemonCommand::Restart { target } => {
-            match manager::restart_by_target(map, &target).await {
-                Ok(_)  => DaemonResponse::Ok,
-                Err(e) => DaemonResponse::Err(e.to_string()),
-            }
-        }
+        DaemonCommand::Restart { target } => match manager::restart_by_target(map, &target).await {
+            Ok(_) => DaemonResponse::Ok,
+            Err(e) => DaemonResponse::Err(e.to_string()),
+        },
 
-        DaemonCommand::Delete { target } => {
-            match manager::delete(map, &target).await {
-                Ok(_)  => DaemonResponse::Ok,
-                Err(e) => DaemonResponse::Err(e.to_string()),
-            }
-        }
+        DaemonCommand::Delete { target } => match manager::delete(map, &target).await {
+            Ok(_) => DaemonResponse::Ok,
+            Err(e) => DaemonResponse::Err(e.to_string()),
+        },
 
         DaemonCommand::Watch { target, enable } => {
             match manager::set_watch(map, &target, enable).await {
-                Ok(_)  => DaemonResponse::Ok,
+                Ok(_) => DaemonResponse::Ok,
                 Err(e) => DaemonResponse::Err(e.to_string()),
             }
         }

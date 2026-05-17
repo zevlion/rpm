@@ -3,6 +3,17 @@ name = "rpm2"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = []
+rt-multi-thread = ["tokio/rt-multi-thread"]
+macros = ["tokio/macros"]
+io-util = ["tokio/io-util"]
+fs = ["tokio/fs"]
+sync = ["tokio/sync"]
+time = ["tokio/time"]
+process = ["tokio/process"]
+net = ["tokio/net"]
+
 [dependencies]
 anyhow = "1.0.102"
 crossterm = "0.29.0"
