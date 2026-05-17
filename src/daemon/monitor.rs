@@ -18,11 +18,10 @@ pub async fn run(map: ProcessMap) {
             // update uptime
             {
                 let mut locked = map.lock().await;
-                if let Some(entry) = locked.get_mut(&id) {
-                    if let Some(started_at) = entry.started_at {
+                if let Some(entry) = locked.get_mut(&id)
+                    && let Some(started_at) = entry.started_at {
                         entry.process.uptime = started_at.elapsed();
                     }
-                }
             }
 
             // poll cpu + mem from /proc
@@ -31,15 +30,14 @@ pub async fn run(map: ProcessMap) {
                 locked.get(&id).and_then(|e| e.process.pid)
             };
 
-            if let Some(pid) = pid {
-                if let Ok((cpu, mem)) = read_proc_stats(pid).await {
+            if let Some(pid) = pid
+                && let Ok((cpu, mem)) = read_proc_stats(pid).await {
                     let mut locked = map.lock().await;
                     if let Some(entry) = locked.get_mut(&id) {
                         entry.process.cpu = cpu;
                         entry.process.mem = mem;
                     }
                 }
-            }
 
             // check if exited, auto-restart if watching
             let should_restart = {

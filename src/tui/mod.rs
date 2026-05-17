@@ -18,16 +18,15 @@ pub async fn run(terminal: &mut Term) -> Result<()> {
 
     loop {
         // fetch latest process list
-        if let Ok(res) = client.send(DaemonCommand::List).await {
-            if let crate::ipc::messages::DaemonResponse::ProcessList(list) = res {
+        if let Ok(res) = client.send(DaemonCommand::List).await
+            && let crate::ipc::messages::DaemonResponse::ProcessList(list) = res {
                 processes = list;
             }
-        }
 
         print::draw(terminal, &processes, &mut table_state)?;
 
-        if event::poll(Duration::from_millis(250))? {
-            if let Event::Key(key) = event::read()? {
+        if event::poll(Duration::from_millis(250))?
+            && let Event::Key(key) = event::read()? {
                 let selected_id = table_state
                     .selected()
                     .and_then(|i| processes.get(i))
@@ -57,7 +56,6 @@ pub async fn run(terminal: &mut Term) -> Result<()> {
                     Action::None => {}
                 }
             }
-        }
     }
 
     Ok(())

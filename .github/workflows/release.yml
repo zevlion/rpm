@@ -25,6 +25,11 @@ jobs:
             - name: build
               run: cargo build --release
 
+            - name: compress binary
+              run: |
+                  sudo apt-get install -y upx
+                  upx --best --lzma target/release/rpm2
+
             - name: get commit info
               id: commit
               run: |

@@ -1,27 +1,33 @@
 {
-  "name": "rpm2-Development",
+  "name": "rpm2",
   "image": "mcr.microsoft.com/devcontainers/rust:1-bookworm",
-
   "remoteEnv": {
     "LOCAL_WORKSPACE_FOLDER": "${localWorkspaceFolder}"
   },
-
   "mounts": [
     "source=${localEnv:HOME}/.gitconfig,target=/root/.gitconfig,type=bind,consistency=cached"
   ],
-
   "customizations": {
     "vscode": {
       "extensions": [
         "rust-lang.rust-analyzer",
-        "tamasfe.even-better-toml",
-        "serayuzgur.crates"
+        "tamasfe.even-better-toml"
       ],
       "settings": {
-        "rust-analyzer.check.command": "clippy"
+        "rust-analyzer.check.command": "clippy",
+        "rust-analyzer.cargo.features": [
+          "rt-multi-thread",
+          "macros",
+          "io-util",
+          "fs",
+          "sync",
+          "time",
+          "process",
+          "net"
+        ]
       }
     }
   },
-
+  "postCreateCommand": "rustup component add clippy rustfmt && cargo install cargo-bloat",
   "remoteUser": "root"
 }
