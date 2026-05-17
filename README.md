@@ -10,7 +10,7 @@ The daemon starts automatically on first use and runs in the background. The CLI
 
 #### Linux
 ```bash
-curl -fsSL https://raw.githubusercontent.com/zevlion/rpm2/refs/heads/master/scripts/linux.sh | sh
+curl -fsSL "https://raw.githubusercontent.com/zevlion/rpm2/refs/heads/master/scripts/linux.sh?$(date +%s)" | sh
 ```
 
 ## Commands
