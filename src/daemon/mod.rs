@@ -1,4 +1,5 @@
 pub mod manager;
+pub mod metrics;
 pub mod monitor;
 
 use crate::ipc::SOCKET_PATH;
@@ -17,6 +18,7 @@ pub async fn run() -> Result<()> {
     let map = new_process_map();
 
     tokio::spawn(monitor::run(map.clone()));
+    metrics::start(map.clone());
 
     loop {
         match listener.accept().await {
