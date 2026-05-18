@@ -17,6 +17,18 @@ async fn main() -> Result<()> {
             daemon::run().await?;
         }
 
+        Some("--version") | Some("-V") => {
+            println!("rpm2 v{}", env!("CARGO_PKG_VERSION"));
+        }
+
+        Some("--uninstall") => {
+            uninstall().await?;
+        }
+
+        Some("--update") => {
+            update().await?;
+        }
+
         Some("start") => {
             let mut client = ensure_daemon().await?;
             let opts = parse_start(&args[2..])?;
@@ -323,6 +335,91 @@ fn print_table(processes: &[process::Process]) {
     println!();
 }
 
+// --- install / uninstall / update ---
+
+async fn uninstall() -> Result<()> {
+    // 1. Kill the daemon gracefully if it's running
+    if let Ok(mut client) = IpcClient::connect().await {
+        println!("Stopping rpm2 daemon...");
+        let _ = client.send(DaemonCommand::Shutdown).await;
+        tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+    }
+
+    // 2. Remove the binary
+    let bin = std::path::Path::new("/usr/local/bin/rpm2");
+    if bin.exists() {
+        // Try without sudo first (works if user owns the file or has write perms)
+        match std::fs::remove_file(bin) {
+            Ok(_) => {
+                println!("✓ Removed /usr/local/bin/rpm2");
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
+                // Fall back to `sudo rm`
+                let status = std::process::Command::new("sudo")
+                    .args(["rm", "/usr/local/bin/rpm2"])
+                    .status()?;
+                if status.success() {
+                    println!("✓ Removed /usr/local/bin/rpm2");
+                } else {
+                    anyhow::bail!("Failed to remove binary (sudo rm exited non-zero)");
+                }
+            }
+            Err(e) => return Err(e.into()),
+        }
+    } else {
+        println!("rpm2 is not installed at /usr/local/bin/rpm2 — nothing to remove.");
+    }
+
+    println!("rpm2 uninstalled.");
+    Ok(())
+}
+
+async fn update() -> Result<()> {
+    const DOWNLOAD_URL: &str = "https://github.com/zevlion/rpm2/releases/download/latest/rpm2";
+    const TMP_PATH: &str = "/tmp/rpm2_bin";
+    const INSTALL_PATH: &str = "/usr/local/bin/rpm2";
+
+    println!("Downloading latest rpm2...");
+
+    // Use curl — avoids pulling in reqwest just for this
+    let status = std::process::Command::new("curl")
+        .args(["-fsSL", DOWNLOAD_URL, "-o", TMP_PATH])
+        .status()?;
+
+    if !status.success() {
+        anyhow::bail!("curl failed — check your internet connection or the release URL");
+    }
+
+    // Make executable
+    std::process::Command::new("chmod")
+        .args(["+x", TMP_PATH])
+        .status()?;
+
+    // Move into place (try direct first, fall back to sudo)
+    let mv_status = std::process::Command::new("mv")
+        .args([TMP_PATH, INSTALL_PATH])
+        .status()?;
+
+    if !mv_status.success() {
+        let sudo_status = std::process::Command::new("sudo")
+            .args(["mv", TMP_PATH, INSTALL_PATH])
+            .status()?;
+        if !sudo_status.success() {
+            anyhow::bail!("Failed to move binary to {INSTALL_PATH}");
+        }
+    }
+
+    // Print new version
+    let ver = std::process::Command::new(INSTALL_PATH)
+        .arg("--version")
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .unwrap_or_else(|_| "(unknown)".into());
+
+    println!("✓ Updated to {ver}");
+    Ok(())
+}
+
 fn print_help() {
     println!(
         r#"
@@ -346,6 +443,10 @@ COMMANDS:
   tui                     Open the terminal UI
   kill                    Stop the rpm2 daemon
 
+  --version, -V           Print version
+  --update                Update rpm2 to the latest release
+  --uninstall             Remove rpm2 from the system
+
 EXAMPLES:
   rpm2 start ./server --name api --watch
   rpm2 start app.js --interpreter node --name frontend
@@ -356,7 +457,6 @@ EXAMPLES:
 "#
     );
 }
-
 // --- tui runner ---
 
 async fn run_tui() -> Result<()> {

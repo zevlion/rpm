@@ -1,4 +1,4 @@
-# rpm2 — Rust Process Manager
+# rpm2 — Process Manager
 
 A lightweight native alternative to PM2. Single binary, zero runtime overhead, no Node.js required.
 
@@ -10,7 +10,7 @@ The daemon starts automatically on first use and runs in the background. The CLI
 
 #### Linux
 ```bash
-curl -fsSL "https://raw.githubusercontent.com/zevlion/rpm2/refs/heads/master/scripts/linux.sh?$(date +%s)" | sh
+curl -fsSL "https://raw.githubusercontent.com/zevlion/rpm2/refs/heads/master/scripts/linux-installer.sh?$(date +%s)" | sh
 ```
 
 ## Commands
@@ -23,6 +23,8 @@ rpm2 delete <id|name|all>  # delete a process
 rpm2 ls                    # list all processes
 rpm2 tui                   # open the terminal UI
 rpm2 kill                  # stop the daemon
+rpm2 --update              # update to the latest release
+rpm2 --uninstall           # remove rpm2 from the system
 ```
 
 ## Start Flags
@@ -46,4 +48,6 @@ rpm2 restart 0
 rpm2 delete all
 rpm2 ls
 rpm2 tui
+rpm2 --update
+rpm2 --uninstall
 ```
