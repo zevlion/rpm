@@ -150,7 +150,6 @@ async fn ensure_daemon() -> Result<IpcClient> {
     for _ in 0..20 {
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         if let Ok(client) = IpcClient::connect().await {
-            eprintln!("[rpm2] daemon started");
             return Ok(client);
         }
     }
