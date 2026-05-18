@@ -62,7 +62,7 @@ pub async fn start(
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
 
-        let mut child = command.spawn()?;
+        let mut child = command.process_group(0).spawn()?;
         let (tx, rx) = broadcast::channel(256);
 
         if let Some(stdout) = child.stdout.take() {
@@ -173,6 +173,7 @@ pub async fn restart(map: &ProcessMap, id: u32) -> Result<()> {
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
+        .process_group(0)
         .args(&args)
         .spawn()?;
 

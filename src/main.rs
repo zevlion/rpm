@@ -47,8 +47,21 @@ async fn main() -> Result<()> {
 
             match res {
                 ipc::messages::DaemonResponse::Ok if attach => {
-                    // stream lines until Eof
+                    // Intercept Ctrl+C so it detaches instead of killing everything
+                    let ctrlc_hit = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+                    let flag = ctrlc_hit.clone();
+                    tokio::spawn(async move {
+                        tokio::signal::ctrl_c().await.ok();
+                        flag.store(true, std::sync::atomic::Ordering::SeqCst);
+                    });
+
                     loop {
+                        if ctrlc_hit.load(std::sync::atomic::Ordering::SeqCst) {
+                            eprintln!(
+                                "\n[rpm2] detached — process still running. use `rpm2 stop` to stop it."
+                            );
+                            break;
+                        }
                         match client.recv().await? {
                             ipc::messages::DaemonResponse::Line(line) => println!("{}", line),
                             ipc::messages::DaemonResponse::Eof => break,
@@ -63,6 +76,7 @@ async fn main() -> Result<()> {
                 other => handle_response(other),
             }
         }
+
         Some("stop") => {
             let target = args
                 .get(2)
@@ -239,6 +253,7 @@ fn handle_response(res: ipc::messages::DaemonResponse) {
         ipc::messages::DaemonResponse::Eof => {}
     }
 }
+
 fn print_list(res: ipc::messages::DaemonResponse) {
     match res {
         ipc::messages::DaemonResponse::ProcessList(list) => print_table(&list),
@@ -348,13 +363,11 @@ async fn uninstall() -> Result<()> {
     // 2. Remove the binary
     let bin = std::path::Path::new("/usr/local/bin/rpm2");
     if bin.exists() {
-        // Try without sudo first (works if user owns the file or has write perms)
         match std::fs::remove_file(bin) {
             Ok(_) => {
                 println!("✓ Removed /usr/local/bin/rpm2");
             }
             Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
-                // Fall back to `sudo rm`
                 let status = std::process::Command::new("sudo")
                     .args(["rm", "/usr/local/bin/rpm2"])
                     .status()?;
@@ -381,7 +394,6 @@ async fn update() -> Result<()> {
 
     println!("Downloading latest rpm2...");
 
-    // Use curl — avoids pulling in reqwest just for this
     let status = std::process::Command::new("curl")
         .args(["-fsSL", DOWNLOAD_URL, "-o", TMP_PATH])
         .status()?;
@@ -390,12 +402,10 @@ async fn update() -> Result<()> {
         anyhow::bail!("curl failed — check your internet connection or the release URL");
     }
 
-    // Make executable
     std::process::Command::new("chmod")
         .args(["+x", TMP_PATH])
         .status()?;
 
-    // Move into place (try direct first, fall back to sudo)
     let mv_status = std::process::Command::new("mv")
         .args([TMP_PATH, INSTALL_PATH])
         .status()?;
@@ -409,7 +419,6 @@ async fn update() -> Result<()> {
         }
     }
 
-    // Print new version
     let ver = std::process::Command::new(INSTALL_PATH)
         .arg("--version")
         .output()
@@ -457,6 +466,7 @@ EXAMPLES:
 "#
     );
 }
+
 // --- tui runner ---
 
 async fn run_tui() -> Result<()> {
