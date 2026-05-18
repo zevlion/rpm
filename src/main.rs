@@ -47,7 +47,6 @@ async fn main() -> Result<()> {
 
             match res {
                 ipc::messages::DaemonResponse::Ok if attach => {
-                    // Intercept Ctrl+C so it detaches instead of killing everything
                     let ctrlc_hit = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
                     let flag = ctrlc_hit.clone();
                     tokio::spawn(async move {
@@ -57,9 +56,6 @@ async fn main() -> Result<()> {
 
                     loop {
                         if ctrlc_hit.load(std::sync::atomic::Ordering::SeqCst) {
-                            eprintln!(
-                                "\n[rpm2] detached — process still running. use `rpm2 stop` to stop it."
-                            );
                             break;
                         }
                         match client.recv().await? {
@@ -72,6 +68,7 @@ async fn main() -> Result<()> {
                             _ => break,
                         }
                     }
+                    drop(client);
                 }
                 other => handle_response(other),
             }
