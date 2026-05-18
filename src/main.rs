@@ -144,6 +144,7 @@ async fn ensure_daemon() -> Result<IpcClient> {
 
     tokio::process::Command::new(std::env::current_exe()?)
         .arg("__daemon")
+        .process_group(0)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
