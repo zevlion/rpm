@@ -127,6 +127,28 @@ pub async fn start(
 }
 
 pub async fn stop(map: &ProcessMap, target: &str) -> Result<()> {
+    if target == "all" {
+        let ids: Vec<u32> = {
+            let locked = map.lock().await;
+            locked.keys().cloned().collect()
+        };
+        for id in ids {
+            let mut locked = map.lock().await;
+            if let Some(entry) = locked.get_mut(&id) {
+                if let Some(child) = entry.child.as_mut() {
+                    let _ = child.kill().await;
+                }
+                entry.child = None;
+                entry.process.status = ProcessStatus::Stopped;
+                entry.process.pid = None;
+                entry.process.cpu = 0.0;
+                entry.process.mem = 0;
+                entry.started_at = None;
+            }
+        }
+        return Ok(());
+    }
+
     let mut locked = map.lock().await;
     let id = resolve(&locked, target).ok_or(anyhow::anyhow!("process '{}' not found", target))?;
     let entry = locked.get_mut(&id).unwrap();
@@ -136,6 +158,8 @@ pub async fn stop(map: &ProcessMap, target: &str) -> Result<()> {
     entry.child = None;
     entry.process.status = ProcessStatus::Stopped;
     entry.process.pid = None;
+    entry.process.cpu = 0.0;
+    entry.process.mem = 0;
     entry.started_at = None;
     Ok(())
 }
