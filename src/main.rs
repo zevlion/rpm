@@ -42,6 +42,7 @@ async fn main() -> Result<()> {
                     watching: opts.watch,
                     interpreter: opts.interpreter,
                     attach,
+                    force: opts.force,
                 })
                 .await?;
 
@@ -166,12 +167,13 @@ struct StartOpts {
     watch: bool,
     interpreter: Option<String>,
     attach: bool,
+    force: bool,
 }
 
 fn parse_start(args: &[String]) -> Result<StartOpts> {
     if args.is_empty() {
         anyhow::bail!(
-            "usage: rpm2 start <cmd> [args..] [--name <n>] [--watch] [--interpreter <i>] [--attach]"
+            "usage: rpm2 start <cmd> [args..] [--name <n>] [--watch] [--interpreter <i>] [--attach] [--force]"
         );
     }
 
@@ -181,6 +183,7 @@ fn parse_start(args: &[String]) -> Result<StartOpts> {
     let mut watch = false;
     let mut interpreter: Option<String> = None;
     let mut attach = false;
+    let mut force = false;
     let mut i = 0;
 
     while i < args.len() {
@@ -198,7 +201,9 @@ fn parse_start(args: &[String]) -> Result<StartOpts> {
             "--attach" | "-a" => {
                 attach = true;
             }
-            "--force" => { /* TODO: kill existing if same name */ }
+            "--force" => {
+                force = true;
+            }
             "--interpreter" | "-i" => {
                 i += 1;
                 interpreter = Some(
@@ -236,6 +241,7 @@ fn parse_start(args: &[String]) -> Result<StartOpts> {
         watch,
         interpreter,
         attach,
+        force,
     })
 }
 

@@ -12,6 +12,7 @@ pub enum DaemonCommand {
         watching: bool,
         interpreter: Option<String>,
         attach: bool,
+        force: bool,
     },
     Stop {
         target: String,

@@ -68,8 +68,12 @@ async fn handle_client(stream: UnixStream, map: ProcessMap) -> Result<()> {
             watching,
             ref interpreter,
             attach: true,
+            force,
         } = cmd
         {
+            if force {
+                let _ = manager::stop(&map, name).await;
+            }
             let id = NEXT_ID.fetch_add(1, Ordering::SeqCst);
             let config = manager::ProcessConfig {
                 id,
@@ -116,7 +120,11 @@ async fn dispatch(cmd: DaemonCommand, map: &ProcessMap) -> DaemonResponse {
             watching,
             interpreter,
             attach,
+            force,
         } => {
+            if force {
+                let _ = manager::stop(map, &name).await;
+            }
             let id = NEXT_ID.fetch_add(1, Ordering::SeqCst);
             let config = manager::ProcessConfig {
                 id,
