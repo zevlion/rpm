@@ -33,10 +33,9 @@ pub fn new_process_map() -> ProcessMap {
 
 fn resolve(map: &HashMap<u32, ManagedProcess>, target: &str) -> Option<u32> {
     if let Ok(id) = target.parse::<u32>()
-        && map.contains_key(&id)
-    {
-        return Some(id);
-    }
+        && map.contains_key(&id) {
+            return Some(id);
+        }
     map.values()
         .find(|e| e.process.name == target)
         .map(|e| e.process.id)
