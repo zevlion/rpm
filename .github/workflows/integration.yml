@@ -1,14 +1,16 @@
 name: integration-test
 
 on:
-    push:
-        branches:
-            - master
+    workflow_run:
+        workflows: ["release"]
+        types:
+            - completed
 
 jobs:
     test:
         name: test (${{ matrix.os }})
         runs-on: ${{ matrix.os }}
+        if: ${{ github.event.workflow_run.conclusion == 'success' }}
 
         strategy:
             fail-fast: false
@@ -37,7 +39,7 @@ jobs:
                 shell: ${{ matrix.shell }}
 
         steps:
-            # ── install rpm2 ─────────────────────────────────────────────────
+            # ── install rpm2 ──────────────────────────────────────────────────
 
             - name: checkout
               uses: actions/checkout@v4
@@ -53,7 +55,8 @@ jobs:
             - name: install rust
               uses: dtolnay/rust-toolchain@stable
 
-            - name: build test binary
+            - name: build test binary (unix)
+              if: matrix.os != 'windows-latest'
               run: |
                   mkdir -p test-fixtures/rust-proc/src
                   cat > test-fixtures/rust-proc/Cargo.toml << 'EOF'
@@ -66,7 +69,6 @@ jobs:
                   use std::time::Duration;
                   fn main() {
                       let args: Vec<String> = std::env::args().collect();
-                      // --crash mode: exit immediately with failure (for --watch test)
                       if args.get(1).map(|s| s.as_str()) == Some("--crash") {
                           eprintln!("test-proc: intentional crash");
                           std::process::exit(1);
@@ -78,12 +80,12 @@ jobs:
                   }
                   EOF
                   cd test-fixtures/rust-proc && cargo build --release
-              shell: bash
 
-            - name: build test binary (windows path)
+            - name: build test binary (windows)
               if: matrix.os == 'windows-latest'
+              shell: pwsh
               run: |
-                  mkdir -p test-fixtures/rust-proc/src
+                  New-Item -ItemType Directory -Force -Path test-fixtures/rust-proc/src | Out-Null
                   @"
                   [package]
                   name = "test-proc"
@@ -105,34 +107,29 @@ jobs:
                   }
                   "@ | Set-Content test-fixtures/rust-proc/src/main.rs
                   cd test-fixtures/rust-proc; cargo build --release
-              shell: pwsh
 
             # ── write test scripts ────────────────────────────────────────────
 
             - name: write test scripts (unix)
               if: matrix.os != 'windows-latest'
               run: |
-                  # infinite loop script
                   cat > /tmp/loop.sh << 'EOF'
                   #!/usr/bin/env bash
                   while true; do echo "loop: tick"; sleep 1; done
                   EOF
                   chmod +x /tmp/loop.sh
 
-                  # python ticker
                   cat > /tmp/ticker.py << 'EOF'
-                  import time, sys
+                  import time
                   while True:
                       print("python: tick", flush=True)
                       time.sleep(1)
                   EOF
 
-                  # node ticker
                   cat > /tmp/ticker.js << 'EOF'
                   setInterval(() => console.log("node: tick"), 1000);
                   EOF
 
-                  # crasher script (for --watch test)
                   cat > /tmp/crasher.sh << 'EOF'
                   #!/usr/bin/env bash
                   echo "crasher: about to exit with failure"
@@ -140,11 +137,21 @@ jobs:
                   EOF
                   chmod +x /tmp/crasher.sh
 
+                  cat > /tmp/three-lines.sh << 'EOF'
+                  #!/usr/bin/env bash
+                  echo "line-one"
+                  sleep 0.2
+                  echo "line-two"
+                  sleep 0.2
+                  echo "line-three"
+                  sleep 0.2
+                  EOF
+                  chmod +x /tmp/three-lines.sh
+
             - name: write test scripts (windows)
               if: matrix.os == 'windows-latest'
               shell: pwsh
               run: |
-                  # infinite loop script
                   @"
                   :loop
                   echo loop: tick
@@ -152,34 +159,38 @@ jobs:
                   goto loop
                   "@ | Set-Content $env:TEMP\loop.bat
 
-                  # python ticker
                   @"
-                  import time, sys
+                  import time
                   while True:
                       print('python: tick', flush=True)
                       time.sleep(1)
                   "@ | Set-Content $env:TEMP\ticker.py
 
-                  # node ticker
                   @"
                   setInterval(() => console.log('node: tick'), 1000);
                   "@ | Set-Content $env:TEMP\ticker.js
 
-                  # crasher (for --watch test)
                   @"
                   echo crasher: about to exit with failure
                   exit 1
                   "@ | Set-Content $env:TEMP\crasher.bat
 
-            # ── helper: assert ls contains name ──────────────────────────────
-            # We use a small inline function across steps via a shared script.
+                  @"
+                  echo line-one
+                  timeout /t 1 /nobreak >nul
+                  echo line-two
+                  timeout /t 1 /nobreak >nul
+                  echo line-three
+                  timeout /t 1 /nobreak >nul
+                  "@ | Set-Content $env:TEMP\three-lines.bat
+
+            # ── write assert helpers ──────────────────────────────────────────
 
             - name: write assert helper (unix)
               if: matrix.os != 'windows-latest'
               run: |
                   cat > /tmp/assert.sh << 'EOF'
                   #!/usr/bin/env bash
-                  # assert_running <name>
                   assert_running() {
                       local name="$1"
                       if ! rpm2 ls 2>/dev/null | grep -q "$name"; then
@@ -189,7 +200,6 @@ jobs:
                       fi
                       echo "✓ '$name' is listed"
                   }
-                  # assert_not_running <name>
                   assert_not_running() {
                       local name="$1"
                       if rpm2 ls 2>/dev/null | grep -q "$name"; then
@@ -228,7 +238,7 @@ jobs:
                   "@ | Set-Content $env:TEMP\assert.ps1
 
             # ══════════════════════════════════════════════════════════════════
-            # TEST 1 — start / ls / stop / delete (shell script)
+            # TEST 1 — start / ls / stop / restart / delete (shell script)
             # ══════════════════════════════════════════════════════════════════
 
             - name: "test 1a: start shell loop"
@@ -251,7 +261,7 @@ jobs:
               run: |
                   rpm2 stop shell-loop
                   sleep 1
-                  source /tmp/assert.sh && assert_running "shell-loop"   # still listed, just stopped
+                  source /tmp/assert.sh && assert_running "shell-loop"
 
             - name: "test 1b: stop shell loop (windows)"
               if: matrix.os == 'windows-latest'
@@ -259,7 +269,7 @@ jobs:
               run: |
                   rpm2 stop shell-loop
                   Start-Sleep 1
-                  . $env:TEMP\assert.ps1; Assert-Running "shell-loop"   # still listed, just stopped
+                  . $env:TEMP\assert.ps1; Assert-Running "shell-loop"
 
             - name: "test 1c: restart shell loop"
               if: matrix.os != 'windows-latest'
@@ -374,23 +384,17 @@ jobs:
               if: matrix.os != 'windows-latest'
               run: |
                   source /tmp/assert.sh
-
-                  # Start a process that crashes immediately, with --watch
                   rpm2 start /tmp/crasher.sh --name crasher --watch
-                  echo "waiting for first crash + restart cycle..."
+                  echo "waiting for crash + restart cycles..."
                   sleep 4
-
-                  # It should still be listed (watch kept it alive through restarts)
                   assert_running "crasher"
 
-                  # Check restart count is > 0 by inspecting ls output
                   RESTARTS=$(rpm2 ls | grep crasher | awk '{print $NF}')
-                  if [ "$RESTARTS" -lt 1 ] 2>/dev/null; then
+                  if [ "${RESTARTS:-0}" -lt 1 ] 2>/dev/null; then
                       echo "✗ FAIL: expected restart count > 0, got: $RESTARTS" >&2
                       exit 1
                   fi
                   echo "✓ restart count is $RESTARTS"
-
                   rpm2 delete crasher
 
             - name: "test 5: --watch restarts crashed process (windows)"
@@ -399,7 +403,7 @@ jobs:
               run: |
                   . $env:TEMP\assert.ps1
                   rpm2 start $env:TEMP\crasher.bat --name crasher --watch
-                  Write-Host "waiting for first crash + restart cycle..."
+                  Write-Host "waiting for crash + restart cycles..."
                   Start-Sleep 4
                   Assert-Running "crasher"
 
@@ -419,24 +423,17 @@ jobs:
             - name: "test 6: --attach streams output"
               if: matrix.os != 'windows-latest'
               run: |
-                  # Run a process that prints 3 lines then exits, capture via --attach
-                  cat > /tmp/three-lines.sh << 'EOF'
-                  #!/usr/bin/env bash
-                  echo "line-one"
-                  echo "line-two"
-                  echo "line-three"
-                  EOF
-                  chmod +x /tmp/three-lines.sh
-
-                  OUTPUT=$(rpm2 start /tmp/three-lines.sh --name streamer --attach 2>&1)
+                  OUTPUT=$(timeout 10s rpm2 start /tmp/three-lines.sh --name streamer --attach 2>&1 || true)
                   echo "captured output: $OUTPUT"
 
                   if ! echo "$OUTPUT" | grep -q "line-one"; then
                       echo "✗ FAIL: expected 'line-one' in attach output" >&2
+                      echo "full output was: $OUTPUT" >&2
                       exit 1
                   fi
                   if ! echo "$OUTPUT" | grep -q "line-three"; then
                       echo "✗ FAIL: expected 'line-three' in attach output" >&2
+                      echo "full output was: $OUTPUT" >&2
                       exit 1
                   fi
                   echo "✓ --attach streamed all output lines correctly"
@@ -446,13 +443,16 @@ jobs:
               if: matrix.os == 'windows-latest'
               shell: pwsh
               run: |
-                  @"
-                  echo line-one
-                  echo line-two
-                  echo line-three
-                  "@ | Set-Content $env:TEMP\three-lines.bat
-
-                  $output = rpm2 start $env:TEMP\three-lines.bat --name streamer --attach 2>&1
+                  $job = Start-Job {
+                      rpm2 start $env:TEMP\three-lines.bat --name streamer --attach 2>&1
+                  }
+                  $completed = Wait-Job $job -Timeout 15
+                  if (-not $completed) {
+                      Stop-Job $job
+                      Write-Host "✗ FAIL: --attach timed out after 15s" -ForegroundColor Red
+                      exit 1
+                  }
+                  $output = Receive-Job $job
                   Write-Host "captured output: $output"
 
                   if (-not ($output | Select-String "line-one")) {
@@ -473,14 +473,11 @@ jobs:
             - name: "test 7: kill stops daemon cleanly"
               if: matrix.os != 'windows-latest'
               run: |
-                  # Start something so the daemon is definitely running
                   rpm2 start /tmp/loop.sh --name pre-kill-proc
                   sleep 1
-
                   rpm2 kill
                   sleep 1
 
-                  # After kill, connecting should fail
                   if rpm2 ls 2>/dev/null; then
                       echo "✗ FAIL: daemon still responding after kill" >&2
                       exit 1
@@ -493,7 +490,6 @@ jobs:
               run: |
                   rpm2 start $env:TEMP\loop.bat --name pre-kill-proc
                   Start-Sleep 1
-
                   rpm2 kill
                   Start-Sleep 1
 
