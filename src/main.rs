@@ -1,5 +1,6 @@
 mod daemon;
 mod ipc;
+mod os;
 mod process;
 mod tui;
 

@@ -1,8 +1,6 @@
 # rpm2 — Process Manager
 
-A lightweight native alternative to PM2. Single binary, zero runtime overhead, no Node.js required.
-
-The daemon starts automatically on first use and runs in the background. The CLI connects to it over a Unix socket, sends a command, and exits. All process state lives in the daemon.
+A lightweight native process manager. Single binary, zero runtime overhead, no Node.js required.
 
 ---
 
@@ -10,8 +8,36 @@ The daemon starts automatically on first use and runs in the background. The CLI
 
 #### Linux
 ```bash
-curl -fsSL "https://raw.githubusercontent.com/zevlion/rpm2/refs/heads/master/scripts/linux-installer.sh?$(date +%s)" | sh
+curl -fsSL "https://raw.githubusercontent.com/zevlion/rpm2/refs/heads/master/scripts/linux-installer.sh?$(date +%s)" | bash
 ```
+
+#### macOS
+```bash
+curl -fsSL "https://raw.githubusercontent.com/zevlion/rpm2/refs/heads/master/scripts/macos-installer.sh?$(date +%s)" | bash
+```
+
+#### Windows
+```powershell
+irm "https://raw.githubusercontent.com/zevlion/rpm2/refs/heads/master/scripts/windows-installer.ps1" | iex
+```
+
+Or with a custom install directory:
+```powershell
+.\windows-installer.ps1 -InstallDir "C:\Program Files\rpm2"
+```
+
+---
+
+## Platform Support
+
+| Platform       | IPC Transport         | Architecture        |
+|----------------|-----------------------|---------------------|
+| Linux          | Unix socket           | x86_64, arm64       |
+| macOS          | Unix socket           | x86_64, arm64 (M1+) |
+| Windows        | Named pipe            | x86_64              |
+| Android        | Abstract Unix socket  | arm64               |
+
+---
 
 ## Commands
 
@@ -25,7 +51,10 @@ rpm2 tui                   # open the terminal UI
 rpm2 kill                  # stop the daemon
 rpm2 --update              # update to the latest release
 rpm2 --uninstall           # remove rpm2 from the system
+rpm2 --version             # print version
 ```
+
+---
 
 ## Start Flags
 
@@ -36,6 +65,8 @@ rpm2 --uninstall           # remove rpm2 from the system
 -i, --interpreter <bin>    # interpreter e.g. node, python3
     --force                # restart if already running
 ```
+
+---
 
 ## Examples
 
@@ -50,4 +81,23 @@ rpm2 ls
 rpm2 tui
 rpm2 --update
 rpm2 --uninstall
+```
+
+---
+
+## How It Works
+
+On first use, rpm2 spawns a background daemon and connects to it via a platform-native IPC channel (Unix socket on Linux/macOS, named pipe on Windows). Subsequent CLI invocations connect to the already-running daemon — startup is instant. Process metadata is persisted to a local SQLite database so the process list survives daemon restarts.
+
+---
+
+## Building from Source
+
+Requires [Rust](https://rustup.rs) 1.85 or later.
+
+```bash
+git clone https://github.com/zevlion/rpm2
+cd rpm2
+cargo build --release
+./target/release/rpm2 --version
 ```

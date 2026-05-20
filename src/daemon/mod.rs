@@ -3,21 +3,18 @@ pub mod manager;
 pub mod metrics;
 pub mod monitor;
 
-use crate::ipc::SOCKET_PATH;
 use crate::ipc::messages::{DaemonCommand, DaemonResponse};
+use crate::os::ipc::{IpcConn, IpcServer};
 use anyhow::Result;
 use manager::{ProcessMap, new_process_map};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::net::{UnixListener, UnixStream};
 use tokio::sync::Mutex;
 
 static NEXT_ID: AtomicU32 = AtomicU32::new(0);
 
 pub async fn run() -> Result<()> {
-    let _ = std::fs::remove_file(SOCKET_PATH);
-    let listener = UnixListener::bind(SOCKET_PATH)?;
+    let server = IpcServer::bind()?;
     let map = new_process_map();
 
     let conn = db::init_db()?;
@@ -49,12 +46,12 @@ pub async fn run() -> Result<()> {
     metrics::start(map.clone());
 
     loop {
-        match listener.accept().await {
-            Ok((stream, _)) => {
+        match server.accept().await {
+            Ok(conn) => {
                 let map = map.clone();
                 let db_conn = db_conn.clone();
                 tokio::spawn(async move {
-                    if let Err(e) = handle_client(stream, map, db_conn).await {
+                    if let Err(e) = handle_client(conn, map, db_conn).await {
                         eprintln!("[daemon] client error: {}", e);
                     }
                 });
@@ -65,30 +62,17 @@ pub async fn run() -> Result<()> {
 }
 
 async fn handle_client(
-    stream: UnixStream,
+    mut conn: IpcConn,
     map: ProcessMap,
     db_conn: Arc<Mutex<rusqlite::Connection>>,
 ) -> Result<()> {
-    let (reader, mut writer) = stream.into_split();
-    let mut reader = BufReader::new(reader);
-    let mut line = String::new();
-
     loop {
-        line.clear();
-        let n = reader.read_line(&mut line).await?;
-        if n == 0 {
-            break;
-        }
-
-        let trimmed = line.trim();
-        if trimmed.is_empty() {
-            continue;
-        }
-
-        let cmd: DaemonCommand = match serde_json::from_str(trimmed) {
-            Ok(c) => c,
+        let cmd = match conn.read_command().await {
+            Ok(Some(c)) => c,
+            Ok(None) => break,
             Err(e) => {
-                write_response(&mut writer, DaemonResponse::Err(e.to_string())).await?;
+                conn.write_response(DaemonResponse::Err(e.to_string()))
+                    .await?;
                 continue;
             }
         };
@@ -132,24 +116,23 @@ async fn handle_client(
 
             match manager::start(&map, config).await {
                 Ok(Some(mut rx)) => {
-                    write_response(&mut writer, DaemonResponse::Ok).await?;
+                    conn.write_response(DaemonResponse::Ok).await?;
                     while let Ok(line) = rx.recv().await {
-                        write_response(&mut writer, DaemonResponse::Line(line)).await?;
+                        conn.write_response(DaemonResponse::Line(line)).await?;
                     }
-                    write_response(&mut writer, DaemonResponse::Eof).await?;
+                    conn.write_response(DaemonResponse::Eof).await?;
                 }
-                Ok(None) => {
-                    write_response(&mut writer, DaemonResponse::Ok).await?;
-                }
+                Ok(None) => conn.write_response(DaemonResponse::Ok).await?,
                 Err(e) => {
-                    write_response(&mut writer, DaemonResponse::Err(e.to_string())).await?;
+                    conn.write_response(DaemonResponse::Err(e.to_string()))
+                        .await?
                 }
             }
             continue;
         }
 
         let response = dispatch(cmd, &map, &db_conn).await;
-        write_response(&mut writer, response).await?;
+        conn.write_response(response).await?;
     }
 
     Ok(())
@@ -273,19 +256,10 @@ async fn dispatch(
         }
 
         DaemonCommand::Shutdown => {
-            let _ = std::fs::remove_file(SOCKET_PATH);
+            // cleanup is platform-specific — handled inside IpcServer
+            // but we can't call it here without a reference to the server.
+            // The process exit will close all handles cleanly on all platforms.
             std::process::exit(0);
         }
     }
-}
-
-async fn write_response(
-    writer: &mut tokio::net::unix::OwnedWriteHalf,
-    res: DaemonResponse,
-) -> Result<()> {
-    let mut line = serde_json::to_string(&res)?;
-    line.push('\n');
-    writer.write_all(line.as_bytes()).await?;
-    writer.flush().await?;
-    Ok(())
 }

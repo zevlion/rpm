@@ -7,6 +7,84 @@ on:
 
 jobs:
     build:
+        name: build (${{ matrix.target }})
+        runs-on: ${{ matrix.os }}
+
+        permissions:
+            contents: write
+
+        strategy:
+            fail-fast: false
+            matrix:
+                include:
+                    - os: ubuntu-latest
+                      target: x86_64-unknown-linux-gnu
+                      asset_name: rpm2
+                      compress: true
+
+                    - os: macos-latest
+                      target: x86_64-apple-darwin
+                      asset_name: rpm2-macos-x86_64
+                      compress: false
+
+                    - os: macos-latest
+                      target: aarch64-apple-darwin
+                      asset_name: rpm2-macos-arm64
+                      compress: false
+
+                    - os: windows-latest
+                      target: x86_64-pc-windows-msvc
+                      asset_name: rpm2.exe
+                      compress: false
+
+        steps:
+            - name: checkout
+              uses: actions/checkout@v4
+
+            - name: install rust
+              uses: dtolnay/rust-toolchain@stable
+              with:
+                  targets: ${{ matrix.target }}
+
+            - name: cache
+              uses: Swatinem/rust-cache@v2
+              with:
+                  key: ${{ matrix.target }}
+
+            - name: install cross-compile tools (linux)
+              if: matrix.os == 'ubuntu-latest'
+              run: |
+                  sudo apt-get update -q
+                  sudo apt-get install -y upx
+
+            - name: build
+              run: cargo build --release --target ${{ matrix.target }}
+
+            - name: compress binary (linux only)
+              if: matrix.compress == true
+              run: upx --best --lzma target/${{ matrix.target }}/release/rpm2
+
+            - name: stage artifact (unix)
+              if: matrix.os != 'windows-latest'
+              run: |
+                  cp target/${{ matrix.target }}/release/rpm2 ${{ matrix.asset_name }}
+
+            - name: stage artifact (windows)
+              if: matrix.os == 'windows-latest'
+              shell: pwsh
+              run: |
+                  Copy-Item "target/${{ matrix.target }}/release/rpm2.exe" "${{ matrix.asset_name }}"
+
+            - name: upload artifact
+              uses: actions/upload-artifact@v4
+              with:
+                  name: ${{ matrix.asset_name }}
+                  path: ${{ matrix.asset_name }}
+                  retention-days: 1
+
+    release:
+        name: publish release
+        needs: build
         runs-on: ubuntu-latest
 
         permissions:
@@ -16,19 +94,11 @@ jobs:
             - name: checkout
               uses: actions/checkout@v4
 
-            - name: install rust
-              uses: dtolnay/rust-toolchain@stable
-
-            - name: cache
-              uses: Swatinem/rust-cache@v2
-
-            - name: build
-              run: cargo build --release
-
-            - name: compress binary
-              run: |
-                  sudo apt-get install -y upx
-                  upx --best --lzma target/release/rpm2
+            - name: download all artifacts
+              uses: actions/download-artifact@v4
+              with:
+                  path: artifacts
+                  merge-multiple: true
 
             - name: get commit info
               id: commit
@@ -48,7 +118,10 @@ jobs:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               run: |
                   gh release create latest \
-                    ./target/release/rpm2 \
+                    artifacts/rpm2 \
+                    artifacts/rpm2-macos-x86_64 \
+                    artifacts/rpm2-macos-arm64 \
+                    artifacts/rpm2.exe \
                     --title "rpm2 — ${{ steps.commit.outputs.sha }}" \
                     --notes "${{ steps.commit.outputs.msg }}" \
                     --latest
