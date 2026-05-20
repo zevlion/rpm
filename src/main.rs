@@ -141,13 +141,19 @@ async fn ensure_daemon() -> Result<IpcClient> {
         return Ok(client);
     }
 
-    tokio::process::Command::new(std::env::current_exe()?)
-        .arg("__daemon")
-        .process_group(0)
+    let mut cmd = tokio::process::Command::new(std::env::current_exe()?);
+    cmd.arg("__daemon")
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .spawn()?;
+        .stderr(std::process::Stdio::null());
+
+    // process_group(0) detaches the daemon from the terminal on Unix.
+    // Windows has no equivalent — the daemon is already detached by default
+    // when stdin/stdout/stderr are null.
+    #[cfg(unix)]
+    cmd.process_group(0);
+
+    cmd.spawn()?;
 
     for _ in 0..20 {
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
@@ -158,7 +164,6 @@ async fn ensure_daemon() -> Result<IpcClient> {
 
     anyhow::bail!("daemon failed to start within 2s");
 }
-
 // --- start options ---
 
 struct StartOpts {

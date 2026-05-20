@@ -33,9 +33,10 @@ pub fn new_process_map() -> ProcessMap {
 
 fn resolve(map: &HashMap<u32, ManagedProcess>, target: &str) -> Option<u32> {
     if let Ok(id) = target.parse::<u32>()
-        && map.contains_key(&id) {
-            return Some(id);
-        }
+        && map.contains_key(&id)
+    {
+        return Some(id);
+    }
     map.values()
         .find(|e| e.process.name == target)
         .map(|e| e.process.id)
@@ -61,7 +62,10 @@ pub async fn start(
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
 
-        let mut child = command.process_group(0).spawn()?;
+        #[cfg(unix)]
+        command.process_group(0);
+
+        let mut child = command.spawn()?;
         let (tx, rx) = broadcast::channel(256);
 
         if let Some(stdout) = child.stdout.take() {
@@ -90,6 +94,9 @@ pub async fn start(
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null());
+
+        #[cfg(unix)]
+        command.process_group(0);
 
         let child = command.spawn()?;
         (None, None, child)
@@ -192,13 +199,16 @@ pub async fn restart(map: &ProcessMap, id: u32) -> Result<()> {
         None => Command::new(&cmd),
     };
 
-    let child = command
+    command
+        .args(&args)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .process_group(0)
-        .args(&args)
-        .spawn()?;
+        .stderr(std::process::Stdio::null());
+
+    #[cfg(unix)]
+    command.process_group(0);
+
+    let child = command.spawn()?;
 
     let pid = child.id();
 
