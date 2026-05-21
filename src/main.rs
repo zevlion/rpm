@@ -49,25 +49,22 @@ async fn main() -> Result<()> {
 
             match res {
                 ipc::messages::DaemonResponse::Ok if attach => {
-                    let ctrlc_hit = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-                    let flag = ctrlc_hit.clone();
-                    tokio::spawn(async move {
-                        tokio::signal::ctrl_c().await.ok();
-                        flag.store(true, std::sync::atomic::Ordering::SeqCst);
-                    });
-
                     loop {
-                        if ctrlc_hit.load(std::sync::atomic::Ordering::SeqCst) {
-                            break;
-                        }
-                        match client.recv().await? {
-                            ipc::messages::DaemonResponse::Line(line) => println!("{}", line),
-                            ipc::messages::DaemonResponse::Eof => break,
-                            ipc::messages::DaemonResponse::Err(e) => {
-                                eprintln!("✗ {}", e);
+                        tokio::select! {
+                            _ = tokio::signal::ctrl_c() => {
                                 break;
                             }
-                            _ => break,
+                            res = client.recv() => {
+                                match res? {
+                                    ipc::messages::DaemonResponse::Line(line) => println!("{}", line),
+                                    ipc::messages::DaemonResponse::Eof => break,
+                                    ipc::messages::DaemonResponse::Err(e) => {
+                                        eprintln!("✗ {}", e);
+                                        break;
+                                    }
+                                    _ => break,
+                                }
+                            }
                         }
                     }
                     drop(client);
