@@ -19,29 +19,39 @@ pub fn init_db() -> Result<Connection> {
         )",
         [],
     )?;
+
+    // Migrations
+    let _ = conn.execute("ALTER TABLE processes ADD COLUMN mode TEXT DEFAULT 'fork'", []);
+    let _ = conn.execute("ALTER TABLE processes ADD COLUMN instances INTEGER DEFAULT 1", []);
+    let _ = conn.execute("ALTER TABLE processes ADD COLUMN port INTEGER", []);
+    let _ = conn.execute("ALTER TABLE processes ADD COLUMN lb_strategy TEXT", []);
+    let _ = conn.execute("ALTER TABLE processes ADD COLUMN max_memory INTEGER", []);
+    let _ = conn.execute("ALTER TABLE processes ADD COLUMN max_cpu REAL", []);
+
     Ok(conn)
 }
 
 pub fn save_process(
     conn: &Connection,
-    id: u32,
-    name: &str,
-    cmd: &str,
-    args: &[String],
-    watching: bool,
-    interpreter: Option<&str>,
+    process: &Process,
 ) -> Result<()> {
-    let args_json = serde_json::to_string(args)?;
+    let args_json = serde_json::to_string(&process.args)?;
     conn.execute(
-        "INSERT OR REPLACE INTO processes (id, name, cmd, args, watching, interpreter)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        "INSERT OR REPLACE INTO processes (id, name, cmd, args, watching, interpreter, mode, instances, port, lb_strategy, max_memory, max_cpu)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
         params![
-            id,
-            name,
-            cmd,
+            process.id,
+            process.name,
+            process.cmd,
             args_json,
-            if watching { 1 } else { 0 },
-            interpreter
+            if process.watching { 1 } else { 0 },
+            process.interpreter,
+            process.mode,
+            process.instances,
+            process.port,
+            process.lb_strategy,
+            process.max_memory,
+            process.max_cpu,
         ],
     )?;
     Ok(())
@@ -49,7 +59,7 @@ pub fn save_process(
 
 pub fn load_processes(conn: &Connection) -> Result<Vec<Process>> {
     let mut stmt =
-        conn.prepare("SELECT id, name, cmd, args, watching, interpreter FROM processes")?;
+        conn.prepare("SELECT id, name, cmd, args, watching, interpreter, mode, instances, port, lb_strategy, max_memory, max_cpu FROM processes")?;
     let rows = stmt.query_map([], |row| {
         let args_str: String = row.get(3)?;
         let args: Vec<String> = serde_json::from_str(&args_str).unwrap_or_default();
@@ -68,6 +78,12 @@ pub fn load_processes(conn: &Connection) -> Result<Vec<Process>> {
             mem: 0,
             watching: watching_int == 1,
             restarts: 0,
+            mode: row.get::<_, Option<String>>(6)?.unwrap_or_else(|| "fork".to_string()),
+            instances: row.get::<_, Option<u32>>(7)?.unwrap_or(1),
+            port: row.get::<_, Option<u16>>(8)?,
+            lb_strategy: row.get::<_, Option<String>>(9)?,
+            max_memory: row.get::<_, Option<u64>>(10)?,
+            max_cpu: row.get::<_, Option<f32>>(11)?,
         })
     })?;
 

@@ -13,6 +13,18 @@ pub enum DaemonCommand {
         interpreter: Option<String>,
         attach: bool,
         force: bool,
+        #[serde(default)]
+        mode: Option<String>,
+        #[serde(default)]
+        instances: Option<u32>,
+        #[serde(default)]
+        port: Option<u16>,
+        #[serde(default)]
+        lb_strategy: Option<String>,
+        #[serde(default)]
+        max_memory: Option<u64>,
+        #[serde(default)]
+        max_cpu: Option<f32>,
     },
     Stop {
         target: String,

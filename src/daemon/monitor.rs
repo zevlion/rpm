@@ -3,7 +3,7 @@ use crate::process::ProcessStatus;
 use std::time::Duration;
 use tokio::time;
 
-pub async fn run(map: ProcessMap) {
+pub async fn run(map: ProcessMap, lb_map: super::manager::LoadBalancerMap) {
     let mut interval = time::interval(Duration::from_secs(2));
 
     loop {
@@ -40,29 +40,42 @@ pub async fn run(map: ProcessMap) {
                 }
 
             // check if exited, auto-restart if watching
-            let should_restart = {
+            let mut should_restart = false;
+            let mut memory_exceeded = false;
+            let mut app_name = String::new();
+            let mut current_mem = 0;
+            let mut limit_mem = None;
+
+            {
                 let mut locked = map.lock().await;
                 if let Some(entry) = locked.get_mut(&id) {
+                    app_name = entry.process.name.clone();
+                    current_mem = entry.process.mem;
+                    limit_mem = entry.max_memory;
                     if let Some(child) = entry.child.as_mut() {
                         if let Ok(Some(_)) = child.try_wait() {
                             entry.process.status = ProcessStatus::Stopped;
                             entry.process.pid = None;
                             entry.child = None;
                             entry.started_at = None;
-                            entry.process.watching // restart only if watching
-                        } else {
-                            false
-                        }
-                    } else {
-                        false
+                            should_restart = entry.process.watching;
+                        } else if entry.process.status == ProcessStatus::Online
+                            && let Some(max_mem) = entry.max_memory
+                                && entry.process.mem > max_mem {
+                                    memory_exceeded = true;
+                                }
                     }
-                } else {
-                    false
                 }
-            }; // MutexGuard dropped here
+            }
 
             if should_restart {
-                let _ = manager::restart(&map, id).await;
+                let _ = manager::restart(&map, &lb_map, id).await;
+            } else if memory_exceeded {
+                println!(
+                    "[daemon] Process {} ({}) memory usage {} bytes exceeded limit of {:?} bytes. Restarting...",
+                    id, app_name, current_mem, limit_mem
+                );
+                let _ = manager::restart(&map, &lb_map, id).await;
             }
         }
     }

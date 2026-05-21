@@ -6,16 +6,22 @@ pub mod monitor;
 use crate::ipc::messages::{DaemonCommand, DaemonResponse};
 use crate::os::ipc::{IpcConn, IpcServer};
 use anyhow::Result;
-use manager::{ProcessMap, new_process_map};
+use manager::{ProcessMap, LoadBalancerMap, new_process_map};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
+use std::collections::HashMap;
 use tokio::sync::Mutex;
 
 static NEXT_ID: AtomicU32 = AtomicU32::new(0);
 
+pub fn next_id() -> u32 {
+    NEXT_ID.fetch_add(1, Ordering::SeqCst)
+}
+
 pub async fn run() -> Result<()> {
     let server = IpcServer::bind()?;
     let map = new_process_map();
+    let lb_map: LoadBalancerMap = Arc::new(Mutex::new(HashMap::new()));
 
     let conn = db::init_db()?;
     let saved_processes = db::load_processes(&conn)?;
@@ -30,10 +36,14 @@ pub async fn run() -> Result<()> {
             locked_map.insert(
                 proc.id,
                 manager::ManagedProcess {
+                    app_name: proc.name.clone(),
                     process: proc,
                     child: None,
                     started_at: None,
                     output_tx: None,
+                    internal_port: None,
+                    max_memory: None,
+                    max_cpu: None,
                 },
             );
         }
@@ -42,7 +52,7 @@ pub async fn run() -> Result<()> {
 
     let db_conn = Arc::new(Mutex::new(conn));
 
-    tokio::spawn(monitor::run(map.clone()));
+    tokio::spawn(monitor::run(map.clone(), lb_map.clone()));
     metrics::start(map.clone());
 
     loop {
@@ -50,8 +60,9 @@ pub async fn run() -> Result<()> {
             Ok(conn) => {
                 let map = map.clone();
                 let db_conn = db_conn.clone();
+                let lb_map = lb_map.clone();
                 tokio::spawn(async move {
-                    if let Err(e) = handle_client(conn, map, db_conn).await {
+                    if let Err(e) = handle_client(conn, map, db_conn, lb_map).await {
                         eprintln!("[daemon] client error: {}", e);
                     }
                 });
@@ -65,6 +76,7 @@ async fn handle_client(
     mut conn: IpcConn,
     map: ProcessMap,
     db_conn: Arc<Mutex<rusqlite::Connection>>,
+    lb_map: LoadBalancerMap,
 ) -> Result<()> {
     loop {
         let cmd = match conn.read_command().await {
@@ -85,12 +97,18 @@ async fn handle_client(
             ref interpreter,
             attach: true,
             force,
+            ref mode,
+            instances,
+            port,
+            ref lb_strategy,
+            max_memory,
+            max_cpu,
         } = cmd
         {
             if force {
-                let _ = manager::stop(&map, name).await;
+                let _ = manager::stop(&map, &lb_map, name).await;
             }
-            let id = NEXT_ID.fetch_add(1, Ordering::SeqCst);
+            let id = next_id();
             let config = manager::ProcessConfig {
                 id,
                 name: name.clone(),
@@ -99,22 +117,20 @@ async fn handle_client(
                 watching,
                 interpreter: interpreter.clone(),
                 attach: true,
+                mode: mode.clone().unwrap_or_else(|| "fork".to_string()),
+                instances: instances.unwrap_or(1),
+                port,
+                lb_strategy: lb_strategy.clone().unwrap_or_else(|| "round-robin".to_string()),
+                max_memory,
+                max_cpu,
             };
 
             {
                 let db = db_conn.lock().await;
-                let _ = db::save_process(
-                    &db,
-                    id,
-                    &config.name,
-                    &config.cmd,
-                    &config.args,
-                    config.watching,
-                    config.interpreter.as_deref(),
-                );
+                let _ = db::save_process(&db, &config.to_process());
             }
 
-            match manager::start(&map, config).await {
+            match manager::start(&map, config, &lb_map).await {
                 Ok(Some(mut rx)) => {
                     conn.write_response(DaemonResponse::Ok).await?;
                     while let Ok(line) = rx.recv().await {
@@ -131,7 +147,7 @@ async fn handle_client(
             continue;
         }
 
-        let response = dispatch(cmd, &map, &db_conn).await;
+        let response = dispatch(cmd, &map, &db_conn, &lb_map).await;
         conn.write_response(response).await?;
     }
 
@@ -142,6 +158,7 @@ async fn dispatch(
     cmd: DaemonCommand,
     map: &ProcessMap,
     db_conn: &Arc<Mutex<rusqlite::Connection>>,
+    lb_map: &LoadBalancerMap,
 ) -> DaemonResponse {
     match cmd {
         DaemonCommand::List => DaemonResponse::ProcessList(manager::list(map).await),
@@ -154,11 +171,17 @@ async fn dispatch(
             interpreter,
             attach,
             force,
+            mode,
+            instances,
+            port,
+            lb_strategy,
+            max_memory,
+            max_cpu,
         } => {
             if force {
-                let _ = manager::stop(map, &name).await;
+                let _ = manager::stop(map, lb_map, &name).await;
             }
-            let id = NEXT_ID.fetch_add(1, Ordering::SeqCst);
+            let id = next_id();
             let config = manager::ProcessConfig {
                 id,
                 name,
@@ -167,33 +190,31 @@ async fn dispatch(
                 watching,
                 interpreter,
                 attach,
+                mode: mode.unwrap_or_else(|| "fork".to_string()),
+                instances: instances.unwrap_or(1),
+                port,
+                lb_strategy: lb_strategy.unwrap_or_else(|| "round-robin".to_string()),
+                max_memory,
+                max_cpu,
             };
 
             {
                 let db = db_conn.lock().await;
-                let _ = db::save_process(
-                    &db,
-                    id,
-                    &config.name,
-                    &config.cmd,
-                    &config.args,
-                    config.watching,
-                    config.interpreter.as_deref(),
-                );
+                let _ = db::save_process(&db, &config.to_process());
             }
 
-            match manager::start(map, config).await {
+            match manager::start(map, config, lb_map).await {
                 Ok(_) => DaemonResponse::Ok,
                 Err(e) => DaemonResponse::Err(e.to_string()),
             }
         }
 
-        DaemonCommand::Stop { target } => match manager::stop(map, &target).await {
+        DaemonCommand::Stop { target } => match manager::stop(map, lb_map, &target).await {
             Ok(_) => DaemonResponse::Ok,
             Err(e) => DaemonResponse::Err(e.to_string()),
         },
 
-        DaemonCommand::Restart { target } => match manager::restart_by_target(map, &target).await {
+        DaemonCommand::Restart { target } => match manager::restart_by_target(map, lb_map, &target).await {
             Ok(_) => DaemonResponse::Ok,
             Err(e) => DaemonResponse::Err(e.to_string()),
         },
@@ -215,50 +236,24 @@ async fn dispatch(
                     let _ = db::remove_process(&db, process_id);
                 }
             }
-            match manager::delete(map, &target).await {
+            match manager::delete(map, lb_map, &target).await {
                 Ok(_) => DaemonResponse::Ok,
                 Err(e) => DaemonResponse::Err(e.to_string()),
             }
         }
 
         DaemonCommand::Watch { target, enable } => {
-            let id = {
-                let locked = map.lock().await;
-                locked
-                    .values()
-                    .find(|e| e.process.name == target || e.process.id.to_string() == target)
-                    .map(|e| {
-                        (
-                            e.process.id,
-                            e.process.name.clone(),
-                            e.process.cmd.clone(),
-                            e.process.args.clone(),
-                            e.process.interpreter.clone(),
-                        )
-                    })
-            };
-            if let Some((process_id, name, cmd, args, interp)) = id {
-                let db = db_conn.lock().await;
-                let _ = db::save_process(
-                    &db,
-                    process_id,
-                    &name,
-                    &cmd,
-                    &args,
-                    enable,
-                    interp.as_deref(),
-                );
-            }
             match manager::set_watch(map, &target, enable).await {
-                Ok(_) => DaemonResponse::Ok,
+                Ok(process) => {
+                    let db = db_conn.lock().await;
+                    let _ = db::save_process(&db, &process);
+                    DaemonResponse::Ok
+                }
                 Err(e) => DaemonResponse::Err(e.to_string()),
             }
         }
 
         DaemonCommand::Shutdown => {
-            // cleanup is platform-specific — handled inside IpcServer
-            // but we can't call it here without a reference to the server.
-            // The process exit will close all handles cleanly on all platforms.
             std::process::exit(0);
         }
     }

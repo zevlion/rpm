@@ -24,7 +24,7 @@ pub fn draw(
             .split(area);
 
         let header = Row::new(vec![
-            "id", "name", "pid", "cpu%", "mem", "uptime", "status", "watch", "↺",
+            "id", "name", "mode", "pid", "cpu%", "mem", "uptime", "status", "watch", "↺",
         ])
         .style(
             Style::default()
@@ -48,6 +48,7 @@ pub fn draw(
                 Row::new(vec![
                     Cell::from(p.id.to_string()),
                     Cell::from(p.name.clone()),
+                    Cell::from(p.mode.clone()),
                     Cell::from(p.pid.map(|p| p.to_string()).unwrap_or("-".into())),
                     Cell::from(format!("{:.1}", p.cpu)),
                     Cell::from(p.format_mem()),
@@ -62,6 +63,7 @@ pub fn draw(
         let widths = [
             Constraint::Length(4),
             Constraint::Min(12),
+            Constraint::Length(8),
             Constraint::Length(7),
             Constraint::Length(6),
             Constraint::Length(8),

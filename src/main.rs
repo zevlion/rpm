@@ -32,44 +32,82 @@ async fn main() -> Result<()> {
 
         Some("start") => {
             let mut client = ensure_daemon().await?;
-            let opts = parse_start(&args[2..])?;
-            let attach = opts.attach;
+            let path_or_cmd = args.get(2).map(|s| s.as_str()).unwrap_or("");
+            if path_or_cmd.ends_with(".yaml") || path_or_cmd.ends_with(".yml") {
+                let file_content = std::fs::read_to_string(path_or_cmd)?;
+                let config: YamlConfig = serde_yaml::from_str(&file_content)?;
+                
+                for app in config.apps {
+                    let max_mem_bytes = match app.max_memory {
+                        Some(ref m) => Some(parse_memory_limit(m)?),
+                        None => None,
+                    };
+                    
+                    let res = client
+                        .send(DaemonCommand::Start {
+                            name: app.name,
+                            cmd: app.script,
+                            args: app.args.unwrap_or_default(),
+                            watching: app.watch,
+                            interpreter: app.interpreter,
+                            attach: false,
+                            force: true,
+                            mode: app.mode,
+                            instances: app.instances,
+                            port: app.port,
+                            lb_strategy: app.lb_strategy,
+                            max_memory: max_mem_bytes,
+                            max_cpu: app.max_cpu,
+                        })
+                        .await?;
+                    handle_response(res);
+                }
+            } else {
+                let opts = parse_start(&args[2..])?;
+                let attach = opts.attach;
 
-            let res = client
-                .send(DaemonCommand::Start {
-                    name: opts.name,
-                    cmd: opts.cmd,
-                    args: opts.args,
-                    watching: opts.watch,
-                    interpreter: opts.interpreter,
-                    attach,
-                    force: opts.force,
-                })
-                .await?;
+                let res = client
+                    .send(DaemonCommand::Start {
+                        name: opts.name,
+                        cmd: opts.cmd,
+                        args: opts.args,
+                        watching: opts.watch,
+                        interpreter: opts.interpreter,
+                        attach,
+                        force: opts.force,
+                        mode: opts.mode,
+                        instances: opts.instances,
+                        port: opts.port,
+                        lb_strategy: opts.lb_strategy,
+                        max_memory: opts.max_memory,
+                        max_cpu: opts.max_cpu,
+                    })
+                    .await?;
 
-            match res {
-                ipc::messages::DaemonResponse::Ok if attach => {
-                    loop {
-                        tokio::select! {
-                            _ = tokio::signal::ctrl_c() => {
-                                break;
-                            }
-                            res = client.recv() => {
-                                match res? {
-                                    ipc::messages::DaemonResponse::Line(line) => println!("{}", line),
-                                    ipc::messages::DaemonResponse::Eof => break,
-                                    ipc::messages::DaemonResponse::Err(e) => {
-                                        eprintln!("✗ {}", e);
-                                        break;
+                match res {
+                    ipc::messages::DaemonResponse::Ok if attach => {
+                        loop {
+                            tokio::select! {
+                                _ = tokio::signal::ctrl_c() => {
+                                    break;
+                                }
+                                res = client.recv() => {
+                                    match res? {
+                                        ipc::messages::DaemonResponse::Line(line) => println!("{}", line),
+                                        ipc::messages::DaemonResponse::Eof => break,
+                                        ipc::messages::DaemonResponse::Err(e) => {
+                                            eprintln!("✗ {}", e);
+                                            break;
+                                        }
+                                        _ => break,
                                     }
-                                    _ => break,
                                 }
                             }
                         }
+                        drop(client);
                     }
-                    drop(client);
+                    other => handle_response(other),
                 }
-                other => handle_response(other),
             }
         }
 
@@ -144,9 +182,6 @@ async fn ensure_daemon() -> Result<IpcClient> {
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null());
 
-    // process_group(0) detaches the daemon from the terminal on Unix.
-    // Windows has no equivalent — the daemon is already detached by default
-    // when stdin/stdout/stderr are null.
     #[cfg(unix)]
     cmd.process_group(0);
 
@@ -161,6 +196,55 @@ async fn ensure_daemon() -> Result<IpcClient> {
 
     anyhow::bail!("daemon failed to start within 2s");
 }
+
+// --- YAML & Memory Limits Helper ---
+
+#[derive(serde::Deserialize, Debug)]
+struct YamlApp {
+    name: String,
+    script: String,
+    args: Option<Vec<String>>,
+    #[serde(default)]
+    watch: bool,
+    interpreter: Option<String>,
+    #[serde(default)]
+    mode: Option<String>,
+    instances: Option<u32>,
+    port: Option<u16>,
+    lb_strategy: Option<String>,
+    max_memory: Option<String>,
+    max_cpu: Option<f32>,
+}
+
+#[derive(serde::Deserialize, Debug)]
+struct YamlConfig {
+    apps: Vec<YamlApp>,
+}
+
+fn parse_memory_limit(s: &str) -> Result<u64> {
+    let s = s.trim().to_uppercase();
+    if s.ends_with("GB") || s.ends_with("G") {
+        let num_part = s.trim_end_matches("GB").trim_end_matches("G").trim();
+        let val: f64 = num_part.parse()?;
+        Ok((val * 1024.0 * 1024.0 * 1024.0) as u64)
+    } else if s.ends_with("MB") || s.ends_with("M") {
+        let num_part = s.trim_end_matches("MB").trim_end_matches("M").trim();
+        let val: f64 = num_part.parse()?;
+        Ok((val * 1024.0 * 1024.0) as u64)
+    } else if s.ends_with("KB") || s.ends_with("K") {
+        let num_part = s.trim_end_matches("KB").trim_end_matches("K").trim();
+        let val: f64 = num_part.parse()?;
+        Ok((val * 1024.0) as u64)
+    } else if s.ends_with("B") {
+        let num_part = s.trim_end_matches("B").trim();
+        let val: u64 = num_part.parse()?;
+        Ok(val)
+    } else {
+        let val: u64 = s.parse()?;
+        Ok(val)
+    }
+}
+
 // --- start options ---
 
 struct StartOpts {
@@ -171,12 +255,18 @@ struct StartOpts {
     interpreter: Option<String>,
     attach: bool,
     force: bool,
+    mode: Option<String>,
+    instances: Option<u32>,
+    port: Option<u16>,
+    lb_strategy: Option<String>,
+    max_memory: Option<u64>,
+    max_cpu: Option<f32>,
 }
 
 fn parse_start(args: &[String]) -> Result<StartOpts> {
     if args.is_empty() {
         anyhow::bail!(
-            "usage: rpm2 start <cmd> [args..] [--name <n>] [--watch] [--interpreter <i>] [--attach] [--force]"
+            "usage: rpm2 start <cmd> [args..] [--name <name>] [--watch] [--interpreter <interpreter>] [--attach] [--force] [--mode <fork|cluster>] [--instances <instances>] [--port <port>] [--lb-strategy <strategy>] [--max-memory <limit>] [--max-cpu <limit>]"
         );
     }
 
@@ -187,6 +277,12 @@ fn parse_start(args: &[String]) -> Result<StartOpts> {
     let mut interpreter: Option<String> = None;
     let mut attach = false;
     let mut force = false;
+    let mut mode = None;
+    let mut instances = None;
+    let mut port = None;
+    let mut lb_strategy = None;
+    let mut max_memory = None;
+    let mut max_cpu = None;
     let mut i = 0;
 
     while i < args.len() {
@@ -214,6 +310,42 @@ fn parse_start(args: &[String]) -> Result<StartOpts> {
                         .cloned()
                         .ok_or(anyhow::anyhow!("--interpreter requires a value"))?,
                 );
+            }
+            "--mode" | "-m" => {
+                i += 1;
+                mode = Some(
+                    args.get(i)
+                        .cloned()
+                        .ok_or(anyhow::anyhow!("--mode requires a value"))?,
+                );
+            }
+            "--instances" => {
+                i += 1;
+                let val_str = args.get(i).ok_or(anyhow::anyhow!("--instances requires a value"))?;
+                instances = Some(val_str.parse::<u32>().map_err(|_| anyhow::anyhow!("invalid instances value"))?);
+            }
+            "--port" => {
+                i += 1;
+                let val_str = args.get(i).ok_or(anyhow::anyhow!("--port requires a value"))?;
+                port = Some(val_str.parse::<u16>().map_err(|_| anyhow::anyhow!("invalid port value"))?);
+            }
+            "--lb-strategy" => {
+                i += 1;
+                lb_strategy = Some(
+                    args.get(i)
+                        .cloned()
+                        .ok_or(anyhow::anyhow!("--lb-strategy requires a value"))?,
+                );
+            }
+            "--max-memory" => {
+                i += 1;
+                let val_str = args.get(i).ok_or(anyhow::anyhow!("--max-memory requires a value"))?;
+                max_memory = Some(parse_memory_limit(val_str)?);
+            }
+            "--max-cpu" => {
+                i += 1;
+                let val_str = args.get(i).ok_or(anyhow::anyhow!("--max-cpu requires a value"))?;
+                max_cpu = Some(val_str.parse::<f32>().map_err(|_| anyhow::anyhow!("invalid max-cpu value"))?);
             }
             arg => {
                 if cmd.is_empty() {
@@ -245,6 +377,12 @@ fn parse_start(args: &[String]) -> Result<StartOpts> {
         interpreter,
         attach,
         force,
+        mode,
+        instances,
+        port,
+        lb_strategy,
+        max_memory,
+        max_cpu,
     })
 }
 
@@ -270,9 +408,9 @@ fn print_list(res: ipc::messages::DaemonResponse) {
 
 fn print_table(processes: &[process::Process]) {
     // column widths
-    let col = [4, 16, 7, 6, 8, 10, 10, 6, 4];
+    let col = [4, 16, 8, 7, 6, 8, 10, 10, 6, 4];
     let headers = [
-        "id", "name", "pid", "cpu%", "mem", "uptime", "status", "watch", "↺",
+        "id", "name", "mode", "pid", "cpu%", "mem", "uptime", "status", "watch", "↺",
     ];
 
     let total: usize = col.iter().sum::<usize>() + col.len() * 3 + 1;
@@ -325,21 +463,22 @@ fn print_table(processes: &[process::Process]) {
             print!("│");
             print!(" {:<width$} │", p.id, width = col[0]);
             print!(" {:<width$} │", p.name, width = col[1]);
+            print!(" {:<width$} │", p.mode, width = col[2]);
             print!(
                 " {:<width$} │",
                 p.pid.map(|p| p.to_string()).unwrap_or("-".into()),
-                width = col[2]
+                width = col[3]
             );
-            print!(" {:<width$} │", format!("{:.1}", p.cpu), width = col[3]);
-            print!(" {:<width$} │", p.format_mem(), width = col[4]);
-            print!(" {:<width$} │", p.format_uptime(), width = col[5]);
-            print!(" {:<width$} │", status, width = col[6]);
+            print!(" {:<width$} │", format!("{:.1}", p.cpu), width = col[4]);
+            print!(" {:<width$} │", p.format_mem(), width = col[5]);
+            print!(" {:<width$} │", p.format_uptime(), width = col[6]);
+            print!(" {:<width$} │", status, width = col[7]);
             print!(
                 " {:<width$} │",
                 if p.watching { "yes" } else { "no" },
-                width = col[7]
+                width = col[8]
             );
-            print!(" {:<width$} │", p.restarts, width = col[8]);
+            print!(" {:<width$} │", p.restarts, width = col[9]);
             println!();
         }
     }

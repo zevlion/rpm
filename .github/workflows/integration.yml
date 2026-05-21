@@ -1,11 +1,5 @@
 name: integration-test
 
-on:
-    workflow_run:
-        workflows: ["release"]
-        types:
-            - completed
-
 jobs:
     test:
         name: test (${{ matrix.os }})

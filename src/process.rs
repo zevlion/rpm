@@ -21,6 +21,12 @@ pub struct Process {
     pub mem: u64,
     pub watching: bool,
     pub restarts: u32,
+    pub mode: String,
+    pub instances: u32,
+    pub port: Option<u16>,
+    pub lb_strategy: Option<String>,
+    pub max_memory: Option<u64>,
+    pub max_cpu: Option<f32>,
 }
 
 impl Process {
