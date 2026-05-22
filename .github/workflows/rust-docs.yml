@@ -4,32 +4,50 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
+
+# Only allow one concurrent Pages deployment
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
 
 jobs:
-  doc:
+  build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pages: write
-      id-token: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Build Rust documentation
         run: cargo doc --workspace --no-deps --document-private-items
 
-      - name: Upload documentation as artifact
+      # rustdoc places output under target/doc/<crate_name>/index.html.
+      # GitHub Pages needs a root index.html — add a meta-refresh redirect.
+      - name: Add root redirect
+        run: |
+          CRATE=$(cargo metadata --no-deps --format-version 1 \
+            | python3 -c "import sys,json; print(json.load(sys.stdin)['packages'][0]['name'].replace('-','_'))")
+          printf '<!DOCTYPE html><html><head><meta http-equiv="refresh" content="0;url=%s/index.html"></head><body></body></html>' \
+            "$CRATE" > target/doc/index.html
+
+      - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: target/doc
 
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
