@@ -78,7 +78,7 @@ pub fn draw(
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .title(" rpm2 ")
+                    .title(" rpm ")
                     .title_style(
                         Style::default()
                             .fg(Color::Cyan)

@@ -18,6 +18,10 @@ pub fn next_id() -> u32 {
     NEXT_ID.fetch_add(1, Ordering::SeqCst)
 }
 
+pub fn reset_id_counter() {
+    NEXT_ID.store(0, Ordering::SeqCst);
+}
+
 pub async fn run() -> Result<()> {
     let server = IpcServer::bind()?;
     let map = new_process_map();
@@ -95,7 +99,7 @@ async fn handle_client(
             ref args,
             watching,
             ref interpreter,
-            attach: true,
+            attach,
             force,
             ref mode,
             instances,
@@ -105,10 +109,28 @@ async fn handle_client(
             max_cpu,
         } = cmd
         {
-            if force {
-                let _ = manager::stop(&map, &lb_map, name).await;
+            let existing_id = {
+                let locked = map.lock().await;
+                locked.values()
+                    .find(|e| e.app_name == *name || e.process.name == *name)
+                    .map(|e| e.process.id)
+            };
+
+            if let Some(id) = existing_id {
+                let is_online = {
+                    let locked = map.lock().await;
+                    locked.get(&id).map(|e| e.process.status == crate::process::ProcessStatus::Online).unwrap_or(false)
+                };
+                if is_online && !force {
+                    conn.write_response(DaemonResponse::Err(format!("Process '{}' is already running. Use --force to restart.", name)))
+                        .await?;
+                    continue;
+                }
+                // Completely delete the old process from memory map so we don't leak cluster workers
+                let _ = manager::delete(&map, &lb_map, name).await;
             }
-            let id = next_id();
+
+            let id = existing_id.unwrap_or_else(next_id);
             let config = manager::ProcessConfig {
                 id,
                 name: name.clone(),
@@ -116,7 +138,7 @@ async fn handle_client(
                 args: args.clone(),
                 watching,
                 interpreter: interpreter.clone(),
-                attach: true,
+                attach,
                 mode: mode.clone().unwrap_or_else(|| "fork".to_string()),
                 instances: instances.unwrap_or(1),
                 port,
@@ -130,18 +152,25 @@ async fn handle_client(
                 let _ = db::save_process(&db, &config.to_process());
             }
 
-            match manager::start(&map, config, &lb_map).await {
-                Ok(Some(mut rx)) => {
-                    conn.write_response(DaemonResponse::Ok).await?;
-                    while let Ok(line) = rx.recv().await {
-                        conn.write_response(DaemonResponse::Line(line)).await?;
+            if attach {
+                match manager::start(&map, config, &lb_map).await {
+                    Ok(Some(mut rx)) => {
+                        conn.write_response(DaemonResponse::Ok).await?;
+                        while let Ok(line) = rx.recv().await {
+                            conn.write_response(DaemonResponse::Line(line)).await?;
+                        }
+                        conn.write_response(DaemonResponse::Eof).await?;
                     }
-                    conn.write_response(DaemonResponse::Eof).await?;
+                    Ok(None) => conn.write_response(DaemonResponse::Ok).await?,
+                    Err(e) => {
+                        conn.write_response(DaemonResponse::Err(e.to_string()))
+                            .await?
+                    }
                 }
-                Ok(None) => conn.write_response(DaemonResponse::Ok).await?,
-                Err(e) => {
-                    conn.write_response(DaemonResponse::Err(e.to_string()))
-                        .await?
+            } else {
+                match manager::start(&map, config, &lb_map).await {
+                    Ok(_) => conn.write_response(DaemonResponse::Ok).await?,
+                    Err(e) => conn.write_response(DaemonResponse::Err(e.to_string())).await?,
                 }
             }
             continue;
@@ -163,50 +192,8 @@ async fn dispatch(
     match cmd {
         DaemonCommand::List => DaemonResponse::ProcessList(manager::list(map).await),
 
-        DaemonCommand::Start {
-            name,
-            cmd,
-            args,
-            watching,
-            interpreter,
-            attach,
-            force,
-            mode,
-            instances,
-            port,
-            lb_strategy,
-            max_memory,
-            max_cpu,
-        } => {
-            if force {
-                let _ = manager::stop(map, lb_map, &name).await;
-            }
-            let id = next_id();
-            let config = manager::ProcessConfig {
-                id,
-                name,
-                cmd,
-                args,
-                watching,
-                interpreter,
-                attach,
-                mode: mode.unwrap_or_else(|| "fork".to_string()),
-                instances: instances.unwrap_or(1),
-                port,
-                lb_strategy: lb_strategy.unwrap_or_else(|| "round-robin".to_string()),
-                max_memory,
-                max_cpu,
-            };
-
-            {
-                let db = db_conn.lock().await;
-                let _ = db::save_process(&db, &config.to_process());
-            }
-
-            match manager::start(map, config, lb_map).await {
-                Ok(_) => DaemonResponse::Ok,
-                Err(e) => DaemonResponse::Err(e.to_string()),
-            }
+        DaemonCommand::Start { .. } => {
+            DaemonResponse::Err("Start command should be handled by handle_client".to_string())
         }
 
         DaemonCommand::Stop { target } => match manager::stop(map, lb_map, &target).await {
@@ -228,7 +215,7 @@ async fn dispatch(
                     let locked = map.lock().await;
                     locked
                         .values()
-                        .find(|e| e.process.name == target || e.process.id.to_string() == target)
+                        .find(|e| e.app_name == target || e.process.name == target || e.process.id.to_string() == target)
                         .map(|e| e.process.id)
                 };
                 if let Some(process_id) = id {

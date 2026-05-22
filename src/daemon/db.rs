@@ -5,7 +5,7 @@ use std::time::Duration;
 
 pub fn init_db() -> Result<Connection> {
     let mut db_path = std::env::current_exe()?.parent().unwrap().to_path_buf();
-    db_path.push("rpm2.db");
+    db_path.push("rpm.db");
 
     let conn = Connection::open(db_path)?;
     conn.execute(

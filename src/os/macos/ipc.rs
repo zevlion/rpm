@@ -4,7 +4,7 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{UnixListener, UnixStream};
 
 pub fn socket_path() -> std::path::PathBuf {
-    std::env::temp_dir().join("rpm2.sock")
+    std::env::temp_dir().join("rpm.sock")
 }
 
 pub struct IpcClient {

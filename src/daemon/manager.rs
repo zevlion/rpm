@@ -76,7 +76,7 @@ fn resolve(map: &HashMap<u32, ManagedProcess>, target: &str) -> Option<u32> {
         return Some(id);
     }
     map.values()
-        .find(|e| e.process.name == target)
+        .find(|e| e.app_name == target || e.process.name == target)
         .map(|e| e.process.id)
 }
 
@@ -389,7 +389,9 @@ pub async fn restart_by_target(
 ) -> Result<()> {
     let worker_ids: Vec<u32> = {
         let locked = map.lock().await;
-        if let Ok(id) = target.parse::<u32>() {
+        if target == "all" {
+            locked.keys().cloned().collect()
+        } else if let Ok(id) = target.parse::<u32>() {
             if locked.contains_key(&id) {
                 vec![id]
             } else {
@@ -422,6 +424,7 @@ pub async fn delete(
     if target == "all" {
         stop(map, lb_map, "all").await?;
         map.lock().await.clear();
+        super::reset_id_counter();
         return Ok(());
     }
 
@@ -448,14 +451,25 @@ pub async fn delete(
     for id in to_remove {
         locked.remove(&id);
     }
+
+    if locked.is_empty() {
+        super::reset_id_counter();
+    }
     Ok(())
 }
 
 pub async fn set_watch(map: &ProcessMap, target: &str, enable: bool) -> Result<Process> {
     let mut locked = map.lock().await;
     let id = resolve(&locked, target).ok_or(anyhow::anyhow!("process '{}' not found", target))?;
-    let entry = locked.get_mut(&id).ok_or(anyhow::anyhow!("process '{}' not found", target))?;
-    entry.process.watching = enable;
+    
+    let app_name = locked.get(&id).map(|e| e.app_name.clone()).unwrap();
+    for entry in locked.values_mut() {
+        if entry.app_name == app_name {
+            entry.process.watching = enable;
+        }
+    }
+
+    let entry = locked.get(&id).ok_or(anyhow::anyhow!("process '{}' not found", target))?;
     Ok(entry.process.clone())
 }
 

@@ -4,7 +4,7 @@ use std::os::unix::net::SocketAddr;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixStream;
 
-pub const SOCKET_NAME: &[u8] = b"\x00rpm2.sock";
+pub const SOCKET_NAME: &[u8] = b"\x00rpm.sock";
 
 fn abstract_addr() -> Result<SocketAddr> {
     Ok(SocketAddr::from_abstract_name(SOCKET_NAME)?)

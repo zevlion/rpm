@@ -3,9 +3,9 @@ set -euo pipefail
 
 # ── config ────────────────────────────────────────────────────────────────────
 
-REPO="zevlion/rpm2"
-BINARY="rpm2"
-TMP_PATH="/tmp/rpm2_bin"
+REPO="zevlion/rpm"
+BINARY="rpm"
+TMP_PATH="/tmp/rpm_bin"
 INSTALL_DIR="/usr/local/bin"
 INSTALL_PATH="$INSTALL_DIR/$BINARY"
 DOWNLOAD_URL="https://github.com/$REPO/releases/download/latest/$BINARY"
@@ -36,19 +36,19 @@ fi
 # ── detect update vs fresh install ───────────────────────────────────────────
 
 if command -v "$BINARY" &>/dev/null; then
-    CURRENT_VERSION=$(rpm2 --version 2>/dev/null || echo "unknown")
-    echo "Updating rpm2 ($CURRENT_VERSION → latest)..."
+    CURRENT_VERSION=$(rpm --version 2>/dev/null || echo "unknown")
+    echo "Updating rpm ($CURRENT_VERSION → latest)..."
     IS_UPDATE=true
 else
-    echo "Installing rpm2..."
+    echo "Installing rpm..."
     IS_UPDATE=false
 fi
 
 # ── stop daemon before replacing binary ───────────────────────────────────────
 
 if $IS_UPDATE; then
-    info "Stopping rpm2 daemon (if running)..."
-    rpm2 kill 2>/dev/null || true
+    info "Stopping rpm daemon (if running)..."
+    rpm kill 2>/dev/null || true
     sleep 0.4
 fi
 

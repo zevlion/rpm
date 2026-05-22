@@ -3,9 +3,9 @@ set -euo pipefail
 
 # ── config ────────────────────────────────────────────────────────────────────
 
-REPO="zevlion/rpm2"
-BINARY="rpm2"
-TMP_PATH="/tmp/rpm2_bin"
+REPO="zevlion/rpm"
+BINARY="rpm"
+TMP_PATH="/tmp/rpm_bin"
 INSTALL_DIR="/usr/local/bin"
 INSTALL_PATH="$INSTALL_DIR/$BINARY"
 
@@ -13,8 +13,8 @@ INSTALL_PATH="$INSTALL_DIR/$BINARY"
 
 ARCH=$(uname -m)
 case "$ARCH" in
-    x86_64)  ASSET="rpm2-macos-x86_64" ;;
-    arm64)   ASSET="rpm2-macos-arm64"  ;;
+    x86_64)  ASSET="rpm-macos-x86_64" ;;
+    arm64)   ASSET="rpm-macos-arm64"  ;;
     *)       error "Unsupported architecture: $ARCH" ;;
 esac
 
@@ -51,19 +51,19 @@ fi
 
 IS_UPDATE=false
 if command -v "$BINARY" &>/dev/null; then
-    CURRENT_VERSION=$(rpm2 --version 2>/dev/null || echo "unknown")
-    echo "Updating rpm2 ($CURRENT_VERSION → latest)..."
+    CURRENT_VERSION=$(rpm --version 2>/dev/null || echo "unknown")
+    echo "Updating rpm ($CURRENT_VERSION → latest)..."
     IS_UPDATE=true
 else
-    echo "Installing rpm2..."
+    echo "Installing rpm..."
 fi
 
 info "Detected architecture: $ARCH"
 
 # ── Rosetta check (arm64 Macs running x86_64 binary) ─────────────────────────
 
-if [ "$ARCH" = "arm64" ] && [ -f "/usr/local/bin/rpm2" ]; then
-    EXISTING_ARCH=$(file /usr/local/bin/rpm2 2>/dev/null || true)
+if [ "$ARCH" = "arm64" ] && [ -f "/usr/local/bin/rpm" ]; then
+    EXISTING_ARCH=$(file /usr/local/bin/rpm 2>/dev/null || true)
     if echo "$EXISTING_ARCH" | grep -q "x86_64"; then
         warn "Replacing x86_64 binary with native arm64 build."
     fi
@@ -72,8 +72,8 @@ fi
 # ── stop daemon before replacing binary ───────────────────────────────────────
 
 if $IS_UPDATE; then
-    info "Stopping rpm2 daemon (if running)..."
-    rpm2 kill 2>/dev/null || true
+    info "Stopping rpm daemon (if running)..."
+    rpm kill 2>/dev/null || true
     sleep 0.4
 fi
 
@@ -178,5 +178,5 @@ NEW_VERSION=$("$INSTALL_PATH" --version 2>/dev/null || echo "unknown")
 if $IS_UPDATE; then
     success "Updated to $NEW_VERSION"
 else
-    success "Installed $NEW_VERSION — run 'rpm2 --help' to get started"
+    success "Installed $NEW_VERSION — run 'rpm --help' to get started"
 fi

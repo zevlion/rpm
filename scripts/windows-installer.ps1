@@ -2,28 +2,28 @@
 
 <#
 .SYNOPSIS
-    Installs or updates rpm2 on Windows.
+    Installs or updates rpm on Windows.
 
 .DESCRIPTION
-    Downloads the latest rpm2 release from GitHub, verifies it,
+    Downloads the latest rpm release from GitHub, verifies it,
     installs it to a user or system directory, and optionally adds
     it to PATH.
 
 .PARAMETER InstallDir
-    Directory to install rpm2 into.
-    Defaults to %LOCALAPPDATA%\rpm2 (user, no elevation needed).
-    Pass "C:\Program Files\rpm2" or similar for a system-wide install.
+    Directory to install rpm into.
+    Defaults to %LOCALAPPDATA%\rpm (user, no elevation needed).
+    Pass "C:\Program Files\rpm" or similar for a system-wide install.
 
 .PARAMETER Force
     Re-install even if the current version is already up to date.
 
 .EXAMPLE
     .\windows-installer.ps1
-    .\windows-installer.ps1 -InstallDir "C:\Program Files\rpm2" -Force
+    .\windows-installer.ps1 -InstallDir "C:\Program Files\rpm" -Force
 #>
 
 param (
-    [string] $InstallDir = "$env:LOCALAPPDATA\rpm2",
+    [string] $InstallDir = "$env:LOCALAPPDATA\rpm",
     [switch] $Force
 )
 
@@ -32,10 +32,10 @@ $ErrorActionPreference = "Stop"
 
 # ── config ────────────────────────────────────────────────────────────────────
 
-$Repo        = "zevlion/rpm2"
-$Binary      = "rpm2.exe"
+$Repo        = "zevlion/rpm"
+$Binary      = "rpm.exe"
 $DownloadUrl = "https://github.com/$Repo/releases/download/latest/$Binary"
-$TmpPath     = Join-Path $env:TEMP "rpm2_download.exe"
+$TmpPath     = Join-Path $env:TEMP "rpm_download.exe"
 $InstallPath = Join-Path $InstallDir $Binary
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -89,17 +89,17 @@ if ($IsSystemDir -and -not (Test-IsElevated)) {
 $IsUpdate = $false
 $CurrentVersion = $null
 
-$Existing = Get-Command rpm2 -ErrorAction SilentlyContinue
+$Existing = Get-Command rpm -ErrorAction SilentlyContinue
 if ($Existing) {
-    try { $CurrentVersion = & rpm2 --version 2>$null } catch {}
+    try { $CurrentVersion = & rpm --version 2>$null } catch {}
     if ($CurrentVersion) {
-        Write-Host "Updating rpm2 ($CurrentVersion → latest)..."
+        Write-Host "Updating rpm ($CurrentVersion → latest)..."
     } else {
-        Write-Host "Updating rpm2..."
+        Write-Host "Updating rpm..."
     }
     $IsUpdate = $true
 } else {
-    Write-Host "Installing rpm2..."
+    Write-Host "Installing rpm..."
 }
 
 # ── create install directory ──────────────────────────────────────────────────
@@ -155,8 +155,8 @@ Write-Info "Downloaded $([math]::Round($FileSize / 1KB, 1)) KB — PE header OK"
 # ── stop running daemon before replacing the binary ───────────────────────────
 
 if ($IsUpdate) {
-    Write-Info "Stopping rpm2 daemon (if running)..."
-    try { & rpm2 kill 2>$null } catch {}
+    Write-Info "Stopping rpm daemon (if running)..."
+    try { & rpm kill 2>$null } catch {}
     Start-Sleep -Milliseconds 400
 }
 
@@ -197,5 +197,5 @@ try {
 if ($IsUpdate) {
     Write-Success "Updated to $NewVersion"
 } else {
-    Write-Success "Installed $NewVersion — run 'rpm2 --help' to get started"
+    Write-Success "Installed $NewVersion — run 'rpm --help' to get started"
 }

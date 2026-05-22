@@ -19,22 +19,22 @@ jobs:
                 include:
                     - os: ubuntu-latest
                       target: x86_64-unknown-linux-gnu
-                      asset_name: rpm2
+                      asset_name: rpm
                       compress: true
 
                     - os: macos-latest
                       target: x86_64-apple-darwin
-                      asset_name: rpm2-macos-x86_64
+                      asset_name: rpm-macos-x86_64
                       compress: false
 
                     - os: macos-latest
                       target: aarch64-apple-darwin
-                      asset_name: rpm2-macos-arm64
+                      asset_name: rpm-macos-arm64
                       compress: false
 
                     - os: windows-latest
                       target: x86_64-pc-windows-msvc
-                      asset_name: rpm2.exe
+                      asset_name: rpm.exe
                       compress: false
 
         steps:
@@ -62,18 +62,18 @@ jobs:
 
             - name: compress binary (linux only)
               if: matrix.compress == true
-              run: upx --best --lzma target/${{ matrix.target }}/release/rpm2
+              run: upx --best --lzma target/${{ matrix.target }}/release/rpm
 
             - name: stage artifact (unix)
               if: matrix.os != 'windows-latest'
               run: |
-                  cp target/${{ matrix.target }}/release/rpm2 ${{ matrix.asset_name }}
+                  cp target/${{ matrix.target }}/release/rpm ${{ matrix.asset_name }}
 
             - name: stage artifact (windows)
               if: matrix.os == 'windows-latest'
               shell: pwsh
               run: |
-                  Copy-Item "target/${{ matrix.target }}/release/rpm2.exe" "${{ matrix.asset_name }}"
+                  Copy-Item "target/${{ matrix.target }}/release/rpm.exe" "${{ matrix.asset_name }}"
 
             - name: upload artifact
               uses: actions/upload-artifact@v4
@@ -118,10 +118,10 @@ jobs:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               run: |
                   gh release create latest \
-                    artifacts/rpm2 \
-                    artifacts/rpm2-macos-x86_64 \
-                    artifacts/rpm2-macos-arm64 \
-                    artifacts/rpm2.exe \
-                    --title "rpm2 — ${{ steps.commit.outputs.sha }}" \
+                    artifacts/rpm \
+                    artifacts/rpm-macos-x86_64 \
+                    artifacts/rpm-macos-arm64 \
+                    artifacts/rpm.exe \
+                    --title "rpm — ${{ steps.commit.outputs.sha }}" \
                     --notes "${{ steps.commit.outputs.msg }}" \
                     --latest

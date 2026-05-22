@@ -12,13 +12,21 @@ fn send_request(port: u16, msg: &str) -> Result<String, std::io::Error> {
     Ok(response)
 }
 
+fn clean_state() {
+    let _ = Command::new("target/debug/rpm").arg("kill").output();
+    if let Ok(exe) = std::env::current_exe()
+        && let Some(parent) = exe.parent() {
+            let _ = std::fs::remove_file(parent.join("rpm.db"));
+        }
+    thread::sleep(Duration::from_millis(1000));
+}
+
 fn test_cli_basic_flow() {
     // 1. Clean daemon state
-    let _ = Command::new("target/debug/rpm2").arg("kill").output();
-    thread::sleep(Duration::from_millis(500));
+    clean_state();
 
     // 2. Start a process via CLI args in fork mode
-    let start_output = Command::new("target/debug/rpm2")
+    let start_output = Command::new("target/debug/rpm")
         .arg("start")
         .arg("python3")
         .arg("--")
@@ -33,7 +41,7 @@ fn test_cli_basic_flow() {
     thread::sleep(Duration::from_millis(1500));
 
     // 3. Verify it shows up in list
-    let ls_output = Command::new("target/debug/rpm2")
+    let ls_output = Command::new("target/debug/rpm")
         .arg("ls")
         .output()
         .expect("Failed to run ls");
@@ -42,7 +50,7 @@ fn test_cli_basic_flow() {
     assert!(ls_str.contains("online"));
 
     // 4. Stop the process
-    let stop_output = Command::new("target/debug/rpm2")
+    let stop_output = Command::new("target/debug/rpm")
         .arg("stop")
         .arg("test-fork-basic")
         .output()
@@ -51,7 +59,7 @@ fn test_cli_basic_flow() {
     thread::sleep(Duration::from_millis(1000));
 
     // 5. Verify process status is stopped
-    let ls_output2 = Command::new("target/debug/rpm2")
+    let ls_output2 = Command::new("target/debug/rpm")
         .arg("ls")
         .output()
         .expect("Failed to run ls after stop");
@@ -60,7 +68,7 @@ fn test_cli_basic_flow() {
     assert!(ls_str2.contains("stopped"));
 
     // 6. Restart the process
-    let restart_output = Command::new("target/debug/rpm2")
+    let restart_output = Command::new("target/debug/rpm")
         .arg("restart")
         .arg("test-fork-basic")
         .output()
@@ -69,7 +77,7 @@ fn test_cli_basic_flow() {
     thread::sleep(Duration::from_millis(1500));
 
     // Verify it is online again
-    let ls_output3 = Command::new("target/debug/rpm2")
+    let ls_output3 = Command::new("target/debug/rpm")
         .arg("ls")
         .output()
         .expect("Failed to run ls after restart");
@@ -77,7 +85,7 @@ fn test_cli_basic_flow() {
     assert!(ls_str3.contains("online"));
 
     // 7. Delete the process
-    let delete_output = Command::new("target/debug/rpm2")
+    let delete_output = Command::new("target/debug/rpm")
         .arg("delete")
         .arg("test-fork-basic")
         .output()
@@ -86,7 +94,7 @@ fn test_cli_basic_flow() {
     thread::sleep(Duration::from_millis(500));
 
     // Verify it is gone from the list
-    let ls_output4 = Command::new("target/debug/rpm2")
+    let ls_output4 = Command::new("target/debug/rpm")
         .arg("ls")
         .output()
         .expect("Failed to run ls after delete");
@@ -94,13 +102,12 @@ fn test_cli_basic_flow() {
     assert!(!ls_str4.contains("test-fork-basic"));
 
     // Clean up
-    let _ = Command::new("target/debug/rpm2").arg("kill").output();
+    let _ = Command::new("target/debug/rpm").arg("kill").output();
 }
 
 fn test_load_balancer_and_memory_restart() {
     // 1. Ensure clean state by killing daemon
-    let _ = Command::new("target/debug/rpm2").arg("kill").output();
-    thread::sleep(Duration::from_millis(500));
+    clean_state();
 
     // 2. Create the YAML config
     let yaml_content = r#"
@@ -114,11 +121,11 @@ apps:
     lb_strategy: "round-robin"
     max_memory: "50MB"
 "#;
-    let yaml_path = "tests/rpm2_test.yaml";
+    let yaml_path = "tests/rpm_test.yaml";
     std::fs::write(yaml_path, yaml_content).expect("Failed to write test yaml");
 
     // 3. Start daemon and the application
-    let start_output = Command::new("target/debug/rpm2")
+    let start_output = Command::new("target/debug/rpm")
         .arg("start")
         .arg(yaml_path)
         .output()
@@ -168,10 +175,10 @@ apps:
     thread::sleep(Duration::from_millis(3000));
 
     // Check list of processes to verify
-    let ls_output = Command::new("target/debug/rpm2")
+    let ls_output = Command::new("target/debug/rpm")
         .arg("ls")
         .output()
-        .expect("Failed to run rpm2 ls");
+        .expect("Failed to run rpm ls");
     let ls_str = String::from_utf8_lossy(&ls_output.stdout);
     println!("Process list:\n{}", ls_str);
 
@@ -199,25 +206,24 @@ apps:
     assert_ne!(new_pid, pid_to_keep, "Should have a new PID after restart");
     
     // Check that restarts counter is incremented
-    let ls_output2 = Command::new("target/debug/rpm2")
+    let ls_output2 = Command::new("target/debug/rpm")
         .arg("ls")
         .output()
-        .expect("Failed to run rpm2 ls");
+        .expect("Failed to run rpm ls");
     let ls_str2 = String::from_utf8_lossy(&ls_output2.stdout);
     println!("Process list after restart:\n{}", ls_str2);
 
     // Clean up
-    let _ = Command::new("target/debug/rpm2").arg("kill").output();
+    let _ = Command::new("target/debug/rpm").arg("kill").output();
     let _ = std::fs::remove_file(yaml_path);
 }
 
 fn test_cli_least_loaded() {
     // 1. Clean daemon state
-    let _ = Command::new("target/debug/rpm2").arg("kill").output();
-    thread::sleep(Duration::from_millis(500));
+    clean_state();
 
     // 2. Start a cluster app with least-loaded strategy
-    let start_output = Command::new("target/debug/rpm2")
+    let start_output = Command::new("target/debug/rpm")
         .arg("start")
         .arg("python3")
         .arg("--")
@@ -273,16 +279,15 @@ fn test_cli_least_loaded() {
     }
 
     // Clean up
-    let _ = Command::new("target/debug/rpm2").arg("kill").output();
+    let _ = Command::new("target/debug/rpm").arg("kill").output();
 }
 
 fn test_cluster_lifecycle() {
     // 1. Clean daemon state
-    let _ = Command::new("target/debug/rpm2").arg("kill").output();
-    thread::sleep(Duration::from_millis(500));
+    clean_state();
 
     // 2. Start a cluster app with CLI args
-    let start_output = Command::new("target/debug/rpm2")
+    let start_output = Command::new("target/debug/rpm")
         .arg("start")
         .arg("python3")
         .arg("--")
@@ -302,7 +307,7 @@ fn test_cluster_lifecycle() {
     thread::sleep(Duration::from_millis(3000));
 
     // 3. Verify both workers are listed
-    let ls_output = Command::new("target/debug/rpm2")
+    let ls_output = Command::new("target/debug/rpm")
         .arg("ls")
         .output()
         .expect("Failed to run ls");
@@ -323,7 +328,7 @@ fn test_cluster_lifecycle() {
     assert_ne!(pids[0], pids[1], "Should alternate between workers");
 
     // 5. Restart the application by name (this should restart both workers)
-    let restart_output = Command::new("target/debug/rpm2")
+    let restart_output = Command::new("target/debug/rpm")
         .arg("restart")
         .arg("test-cluster-life")
         .output()
@@ -332,7 +337,7 @@ fn test_cluster_lifecycle() {
     thread::sleep(Duration::from_millis(3000));
 
     // Verify both workers are online and have restart count = 1
-    let ls_output2 = Command::new("target/debug/rpm2")
+    let ls_output2 = Command::new("target/debug/rpm")
         .arg("ls")
         .output()
         .expect("Failed to run ls after restart");
@@ -341,7 +346,7 @@ fn test_cluster_lifecycle() {
     assert!(ls_str2.contains("test-cluster-life-1"));
 
     // 6. Stop the application (this should stop both workers and stop the LB)
-    let stop_output = Command::new("target/debug/rpm2")
+    let stop_output = Command::new("target/debug/rpm")
         .arg("stop")
         .arg("test-cluster-life")
         .output()
@@ -350,7 +355,7 @@ fn test_cluster_lifecycle() {
     thread::sleep(Duration::from_millis(1500));
 
     // Verify both are stopped
-    let ls_output3 = Command::new("target/debug/rpm2")
+    let ls_output3 = Command::new("target/debug/rpm")
         .arg("ls")
         .output()
         .expect("Failed to run ls after stop");
@@ -362,7 +367,7 @@ fn test_cluster_lifecycle() {
     assert!(conn_res.is_err(), "Expected connection to load balancer to fail after stop");
 
     // 7. Delete the application
-    let delete_output = Command::new("target/debug/rpm2")
+    let delete_output = Command::new("target/debug/rpm")
         .arg("delete")
         .arg("test-cluster-life")
         .output()
@@ -371,7 +376,7 @@ fn test_cluster_lifecycle() {
     thread::sleep(Duration::from_millis(1000));
 
     // Verify workers are removed from list
-    let ls_output4 = Command::new("target/debug/rpm2")
+    let ls_output4 = Command::new("target/debug/rpm")
         .arg("ls")
         .output()
         .expect("Failed to run ls after delete");
@@ -379,17 +384,16 @@ fn test_cluster_lifecycle() {
     assert!(!ls_str4.contains("test-cluster-life"));
 
     // Clean up
-    let _ = Command::new("target/debug/rpm2").arg("kill").output();
+    let _ = Command::new("target/debug/rpm").arg("kill").output();
 }
 
 #[cfg(unix)]
 fn test_attach_ctrlc() {
     // 1. Clean daemon state
-    let _ = Command::new("target/debug/rpm2").arg("kill").output();
-    thread::sleep(Duration::from_millis(500));
+    clean_state();
 
     // 2. Start with --attach as a subprocess in cluster mode to bind port 9880
-    let mut child = Command::new("target/debug/rpm2")
+    let mut child = Command::new("target/debug/rpm")
         .arg("start")
         .arg("python3")
         .arg("--")
@@ -444,7 +448,7 @@ fn test_attach_ctrlc() {
 
     // 5. Verify the background process is still online
     thread::sleep(Duration::from_millis(1500));
-    let ls_output = Command::new("target/debug/rpm2")
+    let ls_output = Command::new("target/debug/rpm")
         .arg("ls")
         .output()
         .expect("Failed to run ls");
@@ -457,8 +461,379 @@ fn test_attach_ctrlc() {
     assert!(resp.contains("pid"));
 
     // 7. Clean up
-    let _ = Command::new("target/debug/rpm2").arg("delete").arg("test-attach-ctrlc").output();
-    let _ = Command::new("target/debug/rpm2").arg("kill").output();
+    let _ = Command::new("target/debug/rpm").arg("delete").arg("test-attach-ctrlc").output();
+    let _ = Command::new("target/debug/rpm").arg("kill").output();
+}
+
+#[allow(dead_code)]
+struct ProcLsEntry {
+    id: u32,
+    name: String,
+    mode: String,
+    pid: Option<u32>,
+    status: String,
+    restarts: u32,
+}
+
+fn parse_ls_output(output: &str) -> Vec<ProcLsEntry> {
+    let mut entries = Vec::new();
+    for line in output.lines() {
+        if !line.starts_with('│') || line.contains("no processes running") || line.contains(" id ") {
+            continue;
+        }
+        let parts: Vec<&str> = line.split('│').collect();
+        if parts.len() >= 11 {
+            let id = parts[1].trim().parse::<u32>();
+            let name = parts[2].trim().to_string();
+            let mode = parts[3].trim().to_string();
+            let pid = parts[4].trim().parse::<u32>().ok();
+            let status = parts[8].trim().to_string();
+            let restarts = parts[10].trim().parse::<u32>();
+            if let (Ok(id), Ok(restarts)) = (id, restarts) {
+                entries.push(ProcLsEntry { id, name, mode, pid, status, restarts });
+            }
+        }
+    }
+    entries
+}
+
+fn test_cli_id_reset_and_reuse() {
+    // 1. Clean daemon state
+    clean_state();
+
+    let delete_all_output = Command::new("target/debug/rpm")
+        .arg("delete")
+        .arg("all")
+        .output()
+        .expect("Failed to delete all processes");
+    assert!(delete_all_output.status.success());
+    thread::sleep(Duration::from_millis(500));
+
+    // 2. Start proc-a
+    let start_output = Command::new("target/debug/rpm")
+        .arg("start")
+        .arg("python3")
+        .arg("--")
+        .arg("tests/mock_server.py")
+        .arg("--name")
+        .arg("proc-a")
+        .output()
+        .expect("Failed to start proc-a");
+    assert!(start_output.status.success());
+    thread::sleep(Duration::from_millis(1500));
+
+    // Verify it gets ID 0
+    let ls_output = Command::new("target/debug/rpm")
+        .arg("ls")
+        .output()
+        .expect("Failed to run ls");
+    let ls_str = String::from_utf8_lossy(&ls_output.stdout);
+    let entries = parse_ls_output(&ls_str);
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].name, "proc-a");
+    assert_eq!(entries[0].id, 0);
+    assert!(entries[0].status.contains("online"));
+
+    // 3. Try starting proc-a again without --force (should error)
+    let start_err_output = Command::new("target/debug/rpm")
+        .arg("start")
+        .arg("python3")
+        .arg("--")
+        .arg("tests/mock_server.py")
+        .arg("--name")
+        .arg("proc-a")
+        .output()
+        .expect("Failed to try to start proc-a again");
+    let err_str = String::from_utf8_lossy(&start_err_output.stderr);
+    let out_str = String::from_utf8_lossy(&start_err_output.stdout);
+    assert!(err_str.contains("already running") || out_str.contains("already running") || err_str.contains("already exists"));
+
+    // 4. Start proc-a again with --force (should keep ID 0)
+    let force_output = Command::new("target/debug/rpm")
+        .arg("start")
+        .arg("python3")
+        .arg("--")
+        .arg("tests/mock_server.py")
+        .arg("--name")
+        .arg("proc-a")
+        .arg("--force")
+        .output()
+        .expect("Failed to start proc-a with --force");
+    assert!(force_output.status.success());
+    thread::sleep(Duration::from_millis(1500));
+
+    let ls_output2 = Command::new("target/debug/rpm")
+        .arg("ls")
+        .output()
+        .expect("Failed to run ls");
+    let ls_str2 = String::from_utf8_lossy(&ls_output2.stdout);
+    let entries2 = parse_ls_output(&ls_str2);
+    assert_eq!(entries2.len(), 1);
+    assert_eq!(entries2[0].name, "proc-a");
+    assert_eq!(entries2[0].id, 0);
+    assert!(entries2[0].status.contains("online"));
+
+    // 5. Stop proc-a
+    let stop_output = Command::new("target/debug/rpm")
+        .arg("stop")
+        .arg("proc-a")
+        .output()
+        .expect("Failed to stop proc-a");
+    assert!(stop_output.status.success());
+    thread::sleep(Duration::from_millis(1000));
+
+    // 6. Start proc-b (should get ID 1 since proc-a is still registered as stopped)
+    let start_b_output = Command::new("target/debug/rpm")
+        .arg("start")
+        .arg("python3")
+        .arg("--")
+        .arg("tests/mock_server.py")
+        .arg("--name")
+        .arg("proc-b")
+        .output()
+        .expect("Failed to start proc-b");
+    assert!(start_b_output.status.success());
+    thread::sleep(Duration::from_millis(1500));
+
+    let ls_output3 = Command::new("target/debug/rpm")
+        .arg("ls")
+        .output()
+        .expect("Failed to run ls");
+    let ls_str3 = String::from_utf8_lossy(&ls_output3.stdout);
+    let entries3 = parse_ls_output(&ls_str3);
+    assert_eq!(entries3.len(), 2);
+    let a_entry = entries3.iter().find(|e| e.name == "proc-a").unwrap();
+    let b_entry = entries3.iter().find(|e| e.name == "proc-b").unwrap();
+    assert_eq!(a_entry.id, 0);
+    assert!(a_entry.status.contains("stopped"));
+    assert_eq!(b_entry.id, 1);
+    assert!(b_entry.status.contains("online"));
+
+    // 7. Start proc-a again (which is stopped) without --force. This should start it and keep ID 0.
+    let start_a_again = Command::new("target/debug/rpm")
+        .arg("start")
+        .arg("python3")
+        .arg("--")
+        .arg("tests/mock_server.py")
+        .arg("--name")
+        .arg("proc-a")
+        .output()
+        .expect("Failed to start stopped proc-a");
+    assert!(start_a_again.status.success());
+    thread::sleep(Duration::from_millis(1500));
+
+    let ls_output4 = Command::new("target/debug/rpm")
+        .arg("ls")
+        .output()
+        .expect("Failed to run ls");
+    let ls_str4 = String::from_utf8_lossy(&ls_output4.stdout);
+    let entries4 = parse_ls_output(&ls_str4);
+    assert_eq!(entries4.len(), 2);
+    let a_entry_new = entries4.iter().find(|e| e.name == "proc-a").unwrap();
+    let b_entry_new = entries4.iter().find(|e| e.name == "proc-b").unwrap();
+    assert_eq!(a_entry_new.id, 0);
+    assert!(a_entry_new.status.contains("online"));
+    assert_eq!(b_entry_new.id, 1);
+    assert!(b_entry_new.status.contains("online"));
+
+    // 8. Delete proc-a
+    let del_a_output = Command::new("target/debug/rpm")
+        .arg("delete")
+        .arg("proc-a")
+        .output()
+        .expect("Failed to delete proc-a");
+    assert!(del_a_output.status.success());
+    thread::sleep(Duration::from_millis(500));
+
+    let ls_output5 = Command::new("target/debug/rpm")
+        .arg("ls")
+        .output()
+        .expect("Failed to run ls");
+    let ls_str5 = String::from_utf8_lossy(&ls_output5.stdout);
+    let entries5 = parse_ls_output(&ls_str5);
+    assert_eq!(entries5.len(), 1);
+    assert_eq!(entries5[0].name, "proc-b");
+    assert_eq!(entries5[0].id, 1);
+
+    // 9. Delete proc-b (the last remaining process, which should reset the next ID to 0)
+    let del_b_output = Command::new("target/debug/rpm")
+        .arg("delete")
+        .arg("proc-b")
+        .output()
+        .expect("Failed to delete proc-b");
+    assert!(del_b_output.status.success());
+    thread::sleep(Duration::from_millis(500));
+
+    let ls_output6 = Command::new("target/debug/rpm")
+        .arg("ls")
+        .output()
+        .expect("Failed to run ls");
+    let ls_str6 = String::from_utf8_lossy(&ls_output6.stdout);
+    assert!(ls_str6.contains("no processes running"));
+
+    // 10. Start a new process (should get ID 0 again)
+    let start_c_output = Command::new("target/debug/rpm")
+        .arg("start")
+        .arg("python3")
+        .arg("--")
+        .arg("tests/mock_server.py")
+        .arg("--name")
+        .arg("proc-c")
+        .output()
+        .expect("Failed to start proc-c");
+    assert!(start_c_output.status.success());
+    thread::sleep(Duration::from_millis(1500));
+
+    let ls_output7 = Command::new("target/debug/rpm")
+        .arg("ls")
+        .output()
+        .expect("Failed to run ls");
+    let ls_str7 = String::from_utf8_lossy(&ls_output7.stdout);
+    let entries7 = parse_ls_output(&ls_str7);
+    assert_eq!(entries7.len(), 1);
+    assert_eq!(entries7[0].name, "proc-c");
+    assert_eq!(entries7[0].id, 0);
+
+    // Clean up
+    let _ = Command::new("target/debug/rpm").arg("kill").output();
+    thread::sleep(Duration::from_millis(500));
+}
+
+fn test_cli_delete_all_reset() {
+    // 1. Clean daemon state
+    clean_state();
+
+    // 2. Start two processes
+    let start_a = Command::new("target/debug/rpm")
+        .arg("start")
+        .arg("python3")
+        .arg("--")
+        .arg("tests/mock_server.py")
+        .arg("--name")
+        .arg("proc-a")
+        .output()
+        .expect("Failed to start proc-a");
+    assert!(start_a.status.success());
+    let start_b = Command::new("target/debug/rpm")
+        .arg("start")
+        .arg("python3")
+        .arg("--")
+        .arg("tests/mock_server.py")
+        .arg("--name")
+        .arg("proc-b")
+        .output()
+        .expect("Failed to start proc-b");
+    assert!(start_b.status.success());
+    thread::sleep(Duration::from_millis(1500));
+
+    // 3. Delete all
+    let delete_all = Command::new("target/debug/rpm")
+        .arg("delete")
+        .arg("all")
+        .output()
+        .expect("Failed to delete all");
+    assert!(delete_all.status.success());
+    thread::sleep(Duration::from_millis(500));
+
+    // 4. Start a new process (should get ID 0 again)
+    let start_c = Command::new("target/debug/rpm")
+        .arg("start")
+        .arg("python3")
+        .arg("--")
+        .arg("tests/mock_server.py")
+        .arg("--name")
+        .arg("proc-c")
+        .output()
+        .expect("Failed to start proc-c");
+    assert!(start_c.status.success());
+    thread::sleep(Duration::from_millis(1500));
+
+    // 5. Verify proc-c has ID 0
+    let ls_output = Command::new("target/debug/rpm")
+        .arg("ls")
+        .output()
+        .expect("Failed to run ls");
+    let ls_str = String::from_utf8_lossy(&ls_output.stdout);
+    let entries = parse_ls_output(&ls_str);
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].name, "proc-c");
+    assert_eq!(entries[0].id, 0);
+
+    // Clean up
+    let _ = Command::new("target/debug/rpm").arg("kill").output();
+    thread::sleep(Duration::from_millis(500));
+}
+
+fn test_cli_restart_all() {
+    // 1. Clean daemon state
+    clean_state();
+
+    // 2. Start two processes
+    let start_a = Command::new("target/debug/rpm")
+        .arg("start")
+        .arg("python3")
+        .arg("--")
+        .arg("tests/mock_server.py")
+        .arg("--name")
+        .arg("proc-a")
+        .output()
+        .expect("Failed to start proc-a");
+    assert!(start_a.status.success());
+    let start_b = Command::new("target/debug/rpm")
+        .arg("start")
+        .arg("python3")
+        .arg("--")
+        .arg("tests/mock_server.py")
+        .arg("--name")
+        .arg("proc-b")
+        .output()
+        .expect("Failed to start proc-b");
+    assert!(start_b.status.success());
+    thread::sleep(Duration::from_millis(1500));
+
+    // Get current PIDs
+    let ls_output = Command::new("target/debug/rpm")
+        .arg("ls")
+        .output()
+        .expect("Failed to run ls");
+    let ls_str = String::from_utf8_lossy(&ls_output.stdout);
+    let entries = parse_ls_output(&ls_str);
+    assert_eq!(entries.len(), 2);
+    let pid_a = entries.iter().find(|e| e.name == "proc-a").unwrap().pid;
+    let pid_b = entries.iter().find(|e| e.name == "proc-b").unwrap().pid;
+    assert!(pid_a.is_some());
+    assert!(pid_b.is_some());
+
+    // 3. Restart all
+    let restart_all = Command::new("target/debug/rpm")
+        .arg("restart")
+        .arg("all")
+        .output()
+        .expect("Failed to restart all");
+    assert!(restart_all.status.success());
+    thread::sleep(Duration::from_millis(1500));
+
+    // 4. Verify both restarted (new PIDs, restart count increased)
+    let ls_output2 = Command::new("target/debug/rpm")
+        .arg("ls")
+        .output()
+        .expect("Failed to run ls");
+    let ls_str2 = String::from_utf8_lossy(&ls_output2.stdout);
+    let entries2 = parse_ls_output(&ls_str2);
+    assert_eq!(entries2.len(), 2);
+    let a_new = entries2.iter().find(|e| e.name == "proc-a").unwrap();
+    let b_new = entries2.iter().find(|e| e.name == "proc-b").unwrap();
+    
+    assert!(a_new.pid.is_some());
+    assert!(b_new.pid.is_some());
+    assert_ne!(a_new.pid, pid_a);
+    assert_ne!(b_new.pid, pid_b);
+    assert_eq!(a_new.restarts, 1);
+    assert_eq!(b_new.restarts, 1);
+
+    // Clean up
+    let _ = Command::new("target/debug/rpm").arg("kill").output();
+    thread::sleep(Duration::from_millis(500));
 }
 
 #[test]
@@ -469,4 +844,7 @@ fn run_all_integration_tests() {
     test_cluster_lifecycle();
     #[cfg(unix)]
     test_attach_ctrlc();
+    test_cli_id_reset_and_reuse();
+    test_cli_delete_all_reset();
+    test_cli_restart_all();
 }

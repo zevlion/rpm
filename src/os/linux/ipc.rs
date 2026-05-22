@@ -3,7 +3,7 @@ use anyhow::Result;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{UnixListener, UnixStream};
 
-pub const SOCKET_PATH: &str = "/tmp/rpm2.sock";
+pub const SOCKET_PATH: &str = "/tmp/rpm.sock";
 
 // ── client ────────────────────────────────────────────────────────────────────
 

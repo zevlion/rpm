@@ -12,37 +12,37 @@ jobs:
                 include:
                     - os: ubuntu-latest
                       shell: bash
-                      rpm2_bin: rpm2
+                      rpm_bin: rpm
                       install_cmd: |
-                          curl -fsSL "https://raw.githubusercontent.com/zevlion/rpm2/refs/heads/master/scripts/linux-installer.sh" | bash
+                          curl -fsSL "https://raw.githubusercontent.com/zevlion/rpm/refs/heads/master/scripts/linux-installer.sh" | bash
 
                     - os: macos-latest
                       shell: bash
-                      rpm2_bin: rpm2
+                      rpm_bin: rpm
                       install_cmd: |
-                          curl -fsSL "https://raw.githubusercontent.com/zevlion/rpm2/refs/heads/master/scripts/macos-installer.sh" | bash
+                          curl -fsSL "https://raw.githubusercontent.com/zevlion/rpm/refs/heads/master/scripts/macos-installer.sh" | bash
 
                     - os: windows-latest
                       shell: pwsh
-                      rpm2_bin: rpm2.exe
+                      rpm_bin: rpm.exe
                       install_cmd: |
-                          irm "https://raw.githubusercontent.com/zevlion/rpm2/refs/heads/master/scripts/windows-installer.ps1" | iex
+                          irm "https://raw.githubusercontent.com/zevlion/rpm/refs/heads/master/scripts/windows-installer.ps1" | iex
 
         defaults:
             run:
                 shell: ${{ matrix.shell }}
 
         steps:
-            # ── install rpm2 ──────────────────────────────────────────────────
+            # ── install rpm ──────────────────────────────────────────────────
 
             - name: checkout
               uses: actions/checkout@v4
 
-            - name: install rpm2
+            - name: install rpm
               run: ${{ matrix.install_cmd }}
 
-            - name: verify rpm2 is on PATH
-              run: rpm2 --version
+            - name: verify rpm is on PATH
+              run: rpm --version
 
             # ── build test rust binary ────────────────────────────────────────
 
@@ -187,18 +187,18 @@ jobs:
                   #!/usr/bin/env bash
                   assert_running() {
                       local name="$1"
-                      if ! rpm2 ls 2>/dev/null | grep -q "$name"; then
-                          echo "✗ FAIL: expected '$name' to appear in rpm2 ls" >&2
-                          rpm2 ls
+                      if ! rpm ls 2>/dev/null | grep -q "$name"; then
+                          echo "✗ FAIL: expected '$name' to appear in rpm ls" >&2
+                          rpm ls
                           exit 1
                       fi
                       echo "✓ '$name' is listed"
                   }
                   assert_not_running() {
                       local name="$1"
-                      if rpm2 ls 2>/dev/null | grep -q "$name"; then
-                          echo "✗ FAIL: expected '$name' to be absent from rpm2 ls" >&2
-                          rpm2 ls
+                      if rpm ls 2>/dev/null | grep -q "$name"; then
+                          echo "✗ FAIL: expected '$name' to be absent from rpm ls" >&2
+                          rpm ls
                           exit 1
                       fi
                       echo "✓ '$name' is not listed"
@@ -212,19 +212,19 @@ jobs:
               run: |
                   @"
                   function Assert-Running([string]`$name) {
-                      `$list = rpm2 ls 2>`$null
+                      `$list = rpm ls 2>`$null
                       if (-not (`$list | Select-String `$name)) {
-                          Write-Host "✗ FAIL: expected '`$name' in rpm2 ls" -ForegroundColor Red
-                          rpm2 ls
+                          Write-Host "✗ FAIL: expected '`$name' in rpm ls" -ForegroundColor Red
+                          rpm ls
                           exit 1
                       }
                       Write-Host "✓ '`$name' is listed" -ForegroundColor Green
                   }
                   function Assert-NotRunning([string]`$name) {
-                      `$list = rpm2 ls 2>`$null
+                      `$list = rpm ls 2>`$null
                       if (`$list | Select-String `$name) {
-                          Write-Host "✗ FAIL: expected '`$name' absent from rpm2 ls" -ForegroundColor Red
-                          rpm2 ls
+                          Write-Host "✗ FAIL: expected '`$name' absent from rpm ls" -ForegroundColor Red
+                          rpm ls
                           exit 1
                       }
                       Write-Host "✓ '`$name' not listed" -ForegroundColor Green
@@ -238,7 +238,7 @@ jobs:
             - name: "test 1a: start shell loop"
               if: matrix.os != 'windows-latest'
               run: |
-                  rpm2 start /tmp/loop.sh --name shell-loop
+                  rpm start /tmp/loop.sh --name shell-loop
                   sleep 1
                   source /tmp/assert.sh && assert_running "shell-loop"
 
@@ -246,14 +246,14 @@ jobs:
               if: matrix.os == 'windows-latest'
               shell: pwsh
               run: |
-                  rpm2 start $env:TEMP\loop.bat --name shell-loop
+                  rpm start $env:TEMP\loop.bat --name shell-loop
                   Start-Sleep 1
                   . $env:TEMP\assert.ps1; Assert-Running "shell-loop"
 
             - name: "test 1b: stop shell loop"
               if: matrix.os != 'windows-latest'
               run: |
-                  rpm2 stop shell-loop
+                  rpm stop shell-loop
                   sleep 1
                   source /tmp/assert.sh && assert_running "shell-loop"
 
@@ -261,14 +261,14 @@ jobs:
               if: matrix.os == 'windows-latest'
               shell: pwsh
               run: |
-                  rpm2 stop shell-loop
+                  rpm stop shell-loop
                   Start-Sleep 1
                   . $env:TEMP\assert.ps1; Assert-Running "shell-loop"
 
             - name: "test 1c: restart shell loop"
               if: matrix.os != 'windows-latest'
               run: |
-                  rpm2 restart shell-loop
+                  rpm restart shell-loop
                   sleep 1
                   source /tmp/assert.sh && assert_running "shell-loop"
 
@@ -276,14 +276,14 @@ jobs:
               if: matrix.os == 'windows-latest'
               shell: pwsh
               run: |
-                  rpm2 restart shell-loop
+                  rpm restart shell-loop
                   Start-Sleep 1
                   . $env:TEMP\assert.ps1; Assert-Running "shell-loop"
 
             - name: "test 1d: delete shell loop"
               if: matrix.os != 'windows-latest'
               run: |
-                  rpm2 delete shell-loop
+                  rpm delete shell-loop
                   sleep 1
                   source /tmp/assert.sh && assert_not_running "shell-loop"
 
@@ -291,7 +291,7 @@ jobs:
               if: matrix.os == 'windows-latest'
               shell: pwsh
               run: |
-                  rpm2 delete shell-loop
+                  rpm delete shell-loop
                   Start-Sleep 1
                   . $env:TEMP\assert.ps1; Assert-NotRunning "shell-loop"
 
@@ -302,10 +302,10 @@ jobs:
             - name: "test 2: start / stop python process"
               if: matrix.os != 'windows-latest'
               run: |
-                  rpm2 start /tmp/ticker.py --interpreter python3 --name py-ticker
+                  rpm start /tmp/ticker.py --interpreter python3 --name py-ticker
                   sleep 1
                   source /tmp/assert.sh && assert_running "py-ticker"
-                  rpm2 delete py-ticker
+                  rpm delete py-ticker
                   sleep 1
                   assert_not_running "py-ticker"
 
@@ -313,10 +313,10 @@ jobs:
               if: matrix.os == 'windows-latest'
               shell: pwsh
               run: |
-                  rpm2 start $env:TEMP\ticker.py --interpreter python --name py-ticker
+                  rpm start $env:TEMP\ticker.py --interpreter python --name py-ticker
                   Start-Sleep 1
                   . $env:TEMP\assert.ps1; Assert-Running "py-ticker"
-                  rpm2 delete py-ticker
+                  rpm delete py-ticker
                   Start-Sleep 1
                   Assert-NotRunning "py-ticker"
 
@@ -327,10 +327,10 @@ jobs:
             - name: "test 3: start / stop node process"
               if: matrix.os != 'windows-latest'
               run: |
-                  rpm2 start /tmp/ticker.js --interpreter node --name node-ticker
+                  rpm start /tmp/ticker.js --interpreter node --name node-ticker
                   sleep 1
                   source /tmp/assert.sh && assert_running "node-ticker"
-                  rpm2 delete node-ticker
+                  rpm delete node-ticker
                   sleep 1
                   assert_not_running "node-ticker"
 
@@ -338,10 +338,10 @@ jobs:
               if: matrix.os == 'windows-latest'
               shell: pwsh
               run: |
-                  rpm2 start $env:TEMP\ticker.js --interpreter node --name node-ticker
+                  rpm start $env:TEMP\ticker.js --interpreter node --name node-ticker
                   Start-Sleep 1
                   . $env:TEMP\assert.ps1; Assert-Running "node-ticker"
-                  rpm2 delete node-ticker
+                  rpm delete node-ticker
                   Start-Sleep 1
                   Assert-NotRunning "node-ticker"
 
@@ -352,10 +352,10 @@ jobs:
             - name: "test 4: start / stop rust binary"
               if: matrix.os != 'windows-latest'
               run: |
-                  rpm2 start ./test-fixtures/rust-proc/target/release/test-proc --name rust-proc
+                  rpm start ./test-fixtures/rust-proc/target/release/test-proc --name rust-proc
                   sleep 1
                   source /tmp/assert.sh && assert_running "rust-proc"
-                  rpm2 delete rust-proc
+                  rpm delete rust-proc
                   sleep 1
                   assert_not_running "rust-proc"
 
@@ -363,10 +363,10 @@ jobs:
               if: matrix.os == 'windows-latest'
               shell: pwsh
               run: |
-                  rpm2 start .\test-fixtures\rust-proc\target\release\test-proc.exe --name rust-proc
+                  rpm start .\test-fixtures\rust-proc\target\release\test-proc.exe --name rust-proc
                   Start-Sleep 1
                   . $env:TEMP\assert.ps1; Assert-Running "rust-proc"
-                  rpm2 delete rust-proc
+                  rpm delete rust-proc
                   Start-Sleep 1
                   Assert-NotRunning "rust-proc"
 
@@ -378,37 +378,37 @@ jobs:
               if: matrix.os != 'windows-latest'
               run: |
                   source /tmp/assert.sh
-                  rpm2 start /tmp/crasher.sh --name crasher --watch
+                  rpm start /tmp/crasher.sh --name crasher --watch
                   echo "waiting for crash + restart cycles..."
                   sleep 4
                   assert_running "crasher"
 
-                  RESTARTS=$(rpm2 ls | grep crasher | awk '{print $NF}')
+                  RESTARTS=$(rpm ls | grep crasher | awk '{print $NF}')
                   if [ "${RESTARTS:-0}" -lt 1 ] 2>/dev/null; then
                       echo "✗ FAIL: expected restart count > 0, got: $RESTARTS" >&2
                       exit 1
                   fi
                   echo "✓ restart count is $RESTARTS"
-                  rpm2 delete crasher
+                  rpm delete crasher
 
             - name: "test 5: --watch restarts crashed process (windows)"
               if: matrix.os == 'windows-latest'
               shell: pwsh
               run: |
                   . $env:TEMP\assert.ps1
-                  rpm2 start $env:TEMP\crasher.bat --name crasher --watch
+                  rpm start $env:TEMP\crasher.bat --name crasher --watch
                   Write-Host "waiting for crash + restart cycles..."
                   Start-Sleep 4
                   Assert-Running "crasher"
 
-                  $line = rpm2 ls | Select-String "crasher"
+                  $line = rpm ls | Select-String "crasher"
                   $restarts = ($line -split '\s+')[-1]
                   if ([int]$restarts -lt 1) {
                       Write-Host "✗ FAIL: expected restart count > 0, got: $restarts" -ForegroundColor Red
                       exit 1
                   }
                   Write-Host "✓ restart count is $restarts" -ForegroundColor Green
-                  rpm2 delete crasher
+                  rpm delete crasher
 
             # ══════════════════════════════════════════════════════════════════
             # TEST 6 — --attach streams output
@@ -417,7 +417,7 @@ jobs:
             - name: "test 6: --attach streams output"
               if: matrix.os != 'windows-latest'
               run: |
-                  OUTPUT=$(timeout 10s rpm2 start /tmp/three-lines.sh --name streamer --attach 2>&1 || true)
+                  OUTPUT=$(timeout 10s rpm start /tmp/three-lines.sh --name streamer --attach 2>&1 || true)
                   echo "captured output: $OUTPUT"
 
                   if ! echo "$OUTPUT" | grep -q "line-one"; then
@@ -431,14 +431,14 @@ jobs:
                       exit 1
                   fi
                   echo "✓ --attach streamed all output lines correctly"
-                  rpm2 delete streamer 2>/dev/null || true
+                  rpm delete streamer 2>/dev/null || true
 
             - name: "test 6: --attach streams output (windows)"
               if: matrix.os == 'windows-latest'
               shell: pwsh
               run: |
                   $job = Start-Job {
-                      rpm2 start $env:TEMP\three-lines.bat --name streamer --attach 2>&1
+                      rpm start $env:TEMP\three-lines.bat --name streamer --attach 2>&1
                   }
                   $completed = Wait-Job $job -Timeout 15
                   if (-not $completed) {
@@ -458,21 +458,21 @@ jobs:
                       exit 1
                   }
                   Write-Host "✓ --attach streamed all output lines correctly" -ForegroundColor Green
-                  rpm2 delete streamer 2>$null
+                  rpm delete streamer 2>$null
 
             # ══════════════════════════════════════════════════════════════════
-            # TEST 7 — rpm2 kill stops the daemon cleanly
+            # TEST 7 — rpm kill stops the daemon cleanly
             # ══════════════════════════════════════════════════════════════════
 
             - name: "test 7: kill stops daemon cleanly"
               if: matrix.os != 'windows-latest'
               run: |
-                  rpm2 start /tmp/loop.sh --name pre-kill-proc
+                  rpm start /tmp/loop.sh --name pre-kill-proc
                   sleep 1
-                  rpm2 kill
+                  rpm kill
                   sleep 1
 
-                  if rpm2 ls 2>/dev/null; then
+                  if rpm ls 2>/dev/null; then
                       echo "✗ FAIL: daemon still responding after kill" >&2
                       exit 1
                   fi
@@ -482,13 +482,13 @@ jobs:
               if: matrix.os == 'windows-latest'
               shell: pwsh
               run: |
-                  rpm2 start $env:TEMP\loop.bat --name pre-kill-proc
+                  rpm start $env:TEMP\loop.bat --name pre-kill-proc
                   Start-Sleep 1
-                  rpm2 kill
+                  rpm kill
                   Start-Sleep 1
 
                   try {
-                      $result = rpm2 ls 2>$null
+                      $result = rpm ls 2>$null
                       Write-Host "✗ FAIL: daemon still responding after kill" -ForegroundColor Red
                       exit 1
                   } catch {

@@ -1,4 +1,4 @@
-# rpm2 — Process Manager
+# rpm — Process Manager
 
 A lightweight native process manager. Single binary, zero runtime overhead, no Node.js required.
 
@@ -8,22 +8,22 @@ A lightweight native process manager. Single binary, zero runtime overhead, no N
 
 #### Linux
 ```bash
-curl -fsSL "https://raw.githubusercontent.com/zevlion/rpm2/refs/heads/master/scripts/linux-installer.sh?$(date +%s)" | bash
+curl -fsSL "https://raw.githubusercontent.com/zevlion/rpm/refs/heads/master/scripts/linux-installer.sh?$(date +%s)" | bash
 ```
 
 #### macOS
 ```bash
-curl -fsSL "https://raw.githubusercontent.com/zevlion/rpm2/refs/heads/master/scripts/macos-installer.sh?$(date +%s)" | bash
+curl -fsSL "https://raw.githubusercontent.com/zevlion/rpm/refs/heads/master/scripts/macos-installer.sh?$(date +%s)" | bash
 ```
 
 #### Windows
 ```powershell
-irm "https://raw.githubusercontent.com/zevlion/rpm2/refs/heads/master/scripts/windows-installer.ps1" | iex
+irm "https://raw.githubusercontent.com/zevlion/rpm/refs/heads/master/scripts/windows-installer.ps1" | iex
 ```
 
 Or with a custom install directory:
 ```powershell
-.\windows-installer.ps1 -InstallDir "C:\Program Files\rpm2"
+.\windows-installer.ps1 -InstallDir "C:\Program Files\rpm"
 ```
 
 ---
@@ -42,16 +42,16 @@ Or with a custom install directory:
 ## Commands
 
 ```bash
-rpm2 start <cmd> [flags]   # start a process
-rpm2 stop <id|name>        # stop a process
-rpm2 restart <id|name>     # restart a process
-rpm2 delete <id|name|all>  # delete a process
-rpm2 ls                    # list all processes
-rpm2 tui                   # open the terminal UI
-rpm2 kill                  # stop the daemon
-rpm2 --update              # update to the latest release
-rpm2 --uninstall           # remove rpm2 from the system
-rpm2 --version             # print version
+rpm start <cmd> [flags]   # start a process
+rpm stop <id|name>        # stop a process
+rpm restart <id|name>     # restart a process
+rpm delete <id|name|all>  # delete a process
+rpm ls                    # list all processes
+rpm tui                   # open the terminal UI
+rpm kill                  # stop the daemon
+rpm --update              # update to the latest release
+rpm --uninstall           # remove rpm from the system
+rpm --version             # print version
 ```
 
 ---
@@ -71,23 +71,23 @@ rpm2 --version             # print version
 ## Examples
 
 ```bash
-rpm2 start ./server --name api --watch
-rpm2 start app.js --interpreter node --name frontend
-rpm2 start script.py --interpreter python3 -w
-rpm2 stop api
-rpm2 restart 0
-rpm2 delete all
-rpm2 ls
-rpm2 tui
-rpm2 --update
-rpm2 --uninstall
+rpm start ./server --name api --watch
+rpm start app.js --interpreter node --name frontend
+rpm start script.py --interpreter python3 -w
+rpm stop api
+rpm restart 0
+rpm delete all
+rpm ls
+rpm tui
+rpm --update
+rpm --uninstall
 ```
 
 ---
 
 ## How It Works
 
-On first use, rpm2 spawns a background daemon and connects to it via a platform-native IPC channel (Unix socket on Linux/macOS, named pipe on Windows). Subsequent CLI invocations connect to the already-running daemon — startup is instant. Process metadata is persisted to a local SQLite database so the process list survives daemon restarts.
+On first use, rpm spawns a background daemon and connects to it via a platform-native IPC channel (Unix socket on Linux/macOS, named pipe on Windows). Subsequent CLI invocations connect to the already-running daemon — startup is instant. Process metadata is persisted to a local SQLite database so the process list survives daemon restarts.
 
 ---
 
@@ -96,8 +96,8 @@ On first use, rpm2 spawns a background daemon and connects to it via a platform-
 Requires [Rust](https://rustup.rs) 1.85 or later.
 
 ```bash
-git clone https://github.com/zevlion/rpm2
-cd rpm2
+git clone https://github.com/zevlion/rpm
+cd rpm
 cargo build --release
-./target/release/rpm2 --version
+./target/release/rpm --version
 ```

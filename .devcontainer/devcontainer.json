@@ -1,5 +1,5 @@
 {
-  "name": "rpm2",
+  "name": "rpm",
   "image": "mcr.microsoft.com/devcontainers/rust:1-bookworm",
   "remoteEnv": {
     "LOCAL_WORKSPACE_FOLDER": "${localWorkspaceFolder}"

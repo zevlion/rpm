@@ -3,7 +3,7 @@ use anyhow::Result;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, ReadHalf, WriteHalf};
 use tokio::net::windows::named_pipe::{ClientOptions, NamedPipeServer, PipeMode, ServerOptions};
 
-pub const PIPE_NAME: &str = r"\\.\pipe\rpm2";
+pub const PIPE_NAME: &str = r"\\.\pipe\rpm";
 
 // ── client ────────────────────────────────────────────────────────────────────
 

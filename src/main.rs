@@ -19,7 +19,7 @@ async fn main() -> Result<()> {
         }
 
         Some("--version") | Some("-V") => {
-            println!("rpm2 v{}", env!("CARGO_PKG_VERSION"));
+            println!("rpm v{}", env!("CARGO_PKG_VERSION"));
         }
 
         Some("--uninstall") => {
@@ -115,7 +115,7 @@ async fn main() -> Result<()> {
             let target = args
                 .get(2)
                 .cloned()
-                .ok_or(anyhow::anyhow!("usage: rpm2 stop <id|name>"))?;
+                .ok_or(anyhow::anyhow!("usage: rpm stop <id|name>"))?;
             let mut client = ensure_daemon().await?;
             let res = client.send(DaemonCommand::Stop { target }).await?;
             handle_response(res);
@@ -125,7 +125,7 @@ async fn main() -> Result<()> {
             let target = args
                 .get(2)
                 .cloned()
-                .ok_or(anyhow::anyhow!("usage: rpm2 restart <id|name>"))?;
+                .ok_or(anyhow::anyhow!("usage: rpm restart <id|name>"))?;
             let mut client = ensure_daemon().await?;
             let res = client.send(DaemonCommand::Restart { target }).await?;
             handle_response(res);
@@ -135,7 +135,7 @@ async fn main() -> Result<()> {
             let target = args
                 .get(2)
                 .cloned()
-                .ok_or(anyhow::anyhow!("usage: rpm2 delete <id|name|all>"))?;
+                .ok_or(anyhow::anyhow!("usage: rpm delete <id|name|all>"))?;
             let mut client = ensure_daemon().await?;
             let res = client.send(DaemonCommand::Delete { target }).await?;
             handle_response(res);
@@ -155,7 +155,7 @@ async fn main() -> Result<()> {
         Some("kill") => {
             if let Ok(mut client) = IpcClient::connect().await {
                 let _ = client.send(DaemonCommand::Shutdown).await;
-                println!("rpm2 daemon stopped.");
+                println!("rpm daemon stopped.");
             } else {
                 println!("daemon is not running.");
             }
@@ -266,7 +266,7 @@ struct StartOpts {
 fn parse_start(args: &[String]) -> Result<StartOpts> {
     if args.is_empty() {
         anyhow::bail!(
-            "usage: rpm2 start <cmd> [args..] [--name <name>] [--watch] [--interpreter <interpreter>] [--attach] [--force] [--mode <fork|cluster>] [--instances <instances>] [--port <port>] [--lb-strategy <strategy>] [--max-memory <limit>] [--max-cpu <limit>]"
+            "usage: rpm start <cmd> [args..] [--name <name>] [--watch] [--interpreter <interpreter>] [--attach] [--force] [--mode <fork|cluster>] [--instances <instances>] [--port <port>] [--lb-strategy <strategy>] [--max-memory <limit>] [--max-cpu <limit>]"
         );
     }
 
@@ -500,24 +500,24 @@ fn print_table(processes: &[process::Process]) {
 async fn uninstall() -> Result<()> {
     // 1. Kill the daemon gracefully if it's running
     if let Ok(mut client) = IpcClient::connect().await {
-        println!("Stopping rpm2 daemon...");
+        println!("Stopping rpm daemon...");
         let _ = client.send(DaemonCommand::Shutdown).await;
         tokio::time::sleep(std::time::Duration::from_millis(400)).await;
     }
 
     // 2. Remove the binary
-    let bin = std::path::Path::new("/usr/local/bin/rpm2");
+    let bin = std::path::Path::new("/usr/local/bin/rpm");
     if bin.exists() {
         match std::fs::remove_file(bin) {
             Ok(_) => {
-                println!("✓ Removed /usr/local/bin/rpm2");
+                println!("✓ Removed /usr/local/bin/rpm");
             }
             Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
                 let status = std::process::Command::new("sudo")
-                    .args(["rm", "/usr/local/bin/rpm2"])
+                    .args(["rm", "/usr/local/bin/rpm"])
                     .status()?;
                 if status.success() {
-                    println!("✓ Removed /usr/local/bin/rpm2");
+                    println!("✓ Removed /usr/local/bin/rpm");
                 } else {
                     anyhow::bail!("Failed to remove binary (sudo rm exited non-zero)");
                 }
@@ -525,19 +525,19 @@ async fn uninstall() -> Result<()> {
             Err(e) => return Err(e.into()),
         }
     } else {
-        println!("rpm2 is not installed at /usr/local/bin/rpm2 — nothing to remove.");
+        println!("rpm is not installed at /usr/local/bin/rpm — nothing to remove.");
     }
 
-    println!("rpm2 uninstalled.");
+    println!("rpm uninstalled.");
     Ok(())
 }
 
 async fn update() -> Result<()> {
-    const DOWNLOAD_URL: &str = "https://github.com/zevlion/rpm2/releases/download/latest/rpm2";
-    const TMP_PATH: &str = "/tmp/rpm2_bin";
-    const INSTALL_PATH: &str = "/usr/local/bin/rpm2";
+    const DOWNLOAD_URL: &str = "https://github.com/zevlion/rpm/releases/download/latest/rpm";
+    const TMP_PATH: &str = "/tmp/rpm_bin";
+    const INSTALL_PATH: &str = "/usr/local/bin/rpm";
 
-    println!("Downloading latest rpm2...");
+    println!("Downloading latest rpm...");
 
     let status = std::process::Command::new("curl")
         .args(["-fsSL", DOWNLOAD_URL, "-o", TMP_PATH])
@@ -577,10 +577,10 @@ async fn update() -> Result<()> {
 fn print_help() {
     println!(
         r#"
-rpm2 — process manager
+rpm — process manager
 
 USAGE:
-  rpm2 <command> [options]
+  rpm <command> [options]
 
 COMMANDS:
   start <cmd>             Start a process
@@ -595,19 +595,19 @@ COMMANDS:
   delete  <id|name|all>   Delete a process
   list, ls                List all processes
   tui                     Open the terminal UI
-  kill                    Stop the rpm2 daemon
+  kill                    Stop the rpm daemon
 
   --version, -V           Print version
-  --update                Update rpm2 to the latest release
-  --uninstall             Remove rpm2 from the system
+  --update                Update rpm to the latest release
+  --uninstall             Remove rpm from the system
 
 EXAMPLES:
-  rpm2 start ./server --name api --watch
-  rpm2 start app.js --interpreter node --name frontend
-  rpm2 stop api
-  rpm2 restart 0
-  rpm2 delete all
-  rpm2 ls
+  rpm start ./server --name api --watch
+  rpm start app.js --interpreter node --name frontend
+  rpm stop api
+  rpm restart 0
+  rpm delete all
+  rpm ls
 "#
     );
 }
