@@ -1,5 +1,36 @@
+//! # IPC Messages
+//!
+//! JSON-serialisable command / response envelopes that travel over the
+//! platform-native IPC channel between the CLI and the background daemon.
+//!
+//! Every message is encoded as a **newline-delimited JSON** (`\n`) frame so
+//! that a single `BufReader::read_line` call on either side retrieves exactly
+//! one message.
+//!
+//! ## Command flow
+//!
+//! ```text
+//! CLI              IPC channel          Daemon
+//!  │── DaemonCommand (JSON\n) ──────────►│
+//!  │◄─ DaemonResponse (JSON\n) ──────────│
+//! ```
+//!
+//! For streaming commands (e.g. `Start { attach: true }`) the daemon sends one
+//! `DaemonResponse::Ok` followed by zero-or-more `Line` frames and a final
+//! `Eof` frame.
+
 use crate::process::Process;
-use serde::{Deserialize, Serialize};
+//! # IPC Messages
+//!
+//! Types exchanged over the IPC channel. Both sides communicate via newline‑delimited
+//! JSON.  The command side (`DaemonCommand`) represents actions that the CLI can
+//! request the daemon to perform.  The response side (`DaemonResponse`) mirrors
+//! the outcome, providing success (`Ok`), errors, process listings, and streaming
+//! output (`Line` / `Eof`).
+//!
+//! These types derive `Serialize` / `Deserialize` so they can be turned into JSON
+//! with `serde_json`.  Keeping the definitions in a dedicated module isolates the
+//! protocol from the transport implementation (`ipc::mod`).
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type")]

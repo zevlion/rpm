@@ -1,3 +1,21 @@
+//! # Metrics
+//!
+//! Background task that refreshes live CPU and memory statistics for every
+//! running process every **2 seconds** using the [`sysinfo`] crate.
+//!
+//! ## Why `sysinfo` and not `/proc` directly?
+//!
+//! [`sysinfo`] provides a portable API that works on Linux, macOS, and Windows.
+//! The monitor module reads `/proc/<pid>/status` for Linux-only memory reads,
+//! but metrics uses `sysinfo` so that CPU% is calculated correctly (it requires
+//! two samples separated by a small delay — the library handles this internally).
+//!
+//! ## Seeding
+//!
+//! A newly spawned PID must be "seeded" (given an initial refresh) before
+//! `cpu_usage()` returns a meaningful value. The task tracks which PIDs have
+//! been seeded and performs a dedicated first-refresh with a 500 ms pause
+//! before the next normal tick.
 use std::time::Duration;
 use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
 use tokio::time;

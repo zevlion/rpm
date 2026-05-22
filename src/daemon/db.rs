@@ -1,3 +1,35 @@
+//! # Database
+//!
+//! SQLite persistence layer for process definitions.
+//!
+//! The database file is stored alongside the `rpm` binary (resolved via
+//! [`std::env::current_exe`]) as `rpm.db`. It survives daemon restarts, so
+//! all configured processes are automatically reloaded the next time the daemon
+//! starts — though they start in the `Stopped` state and must be restarted
+//! manually (or via `--watch`).
+//!
+//! ## Schema
+//!
+//! ```sql
+//! CREATE TABLE processes (
+//!     id          INTEGER PRIMARY KEY,
+//!     name        TEXT    NOT NULL,
+//!     cmd         TEXT    NOT NULL,
+//!     args        TEXT    NOT NULL,  -- JSON array
+//!     watching    INTEGER NOT NULL,  -- 0 | 1
+//!     interpreter TEXT,
+//!     mode        TEXT    DEFAULT 'fork',
+//!     instances   INTEGER DEFAULT 1,
+//!     port        INTEGER,
+//!     lb_strategy TEXT,
+//!     max_memory  INTEGER,           -- bytes
+//!     max_cpu     REAL               -- percent
+//! )
+//! ```
+//!
+//! Schema migrations are applied at startup with `ALTER TABLE … ADD COLUMN`
+//! statements that are intentionally allowed to fail (so they are idempotent
+//! against an already-migrated database).
 use crate::process::{Process, ProcessStatus};
 use anyhow::Result;
 use rusqlite::{Connection, params};

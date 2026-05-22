@@ -1,3 +1,37 @@
+//! # Daemon
+//!
+//! The long-running background process that owns all managed child processes.
+//!
+//! ## Architecture
+//!
+//! ```text
+//!  ┌─────────────────────────────────────────────────────────┐
+//!  │                        daemon                           │
+//!  │                                                         │
+//!  │  IpcServer::accept()                                    │
+//!  │        │                                                │
+//!  │        ▼  (tokio::spawn per client)                     │
+//!  │  handle_client() ──► dispatch()                        │
+//!  │        │                  │                             │
+//!  │        │           manager::{start,stop,restart,delete} │
+//!  │        │                  │                             │
+//!  │        │            ProcessMap (Arc<Mutex<HashMap>>)    │
+//!  │        │                  │                             │
+//!  │  ◄─────┘          monitor::run()  (watch / OOM)        │
+//!  │                   metrics::start() (CPU / mem)         │
+//!  └─────────────────────────────────────────────────────────┘
+//! ```
+//!
+//! The daemon is started via the hidden `__daemon` CLI argument (see
+//! `main.rs::ensure_daemon`).  It binds the platform IPC server, restores
+//! any processes that were persisted to SQLite, then loops accepting client
+//! connections and spawning a task for each one.
+//!
+//! Sub-modules:
+//! - [`db`]      — SQLite persistence (save / load / remove processes)
+//! - [`manager`] — spawn, stop, restart, delete, cluster load-balancer
+//! - [`metrics`] — background task that refreshes CPU/mem via `sysinfo`
+//! - [`monitor`] — background task that detects crashes and enforces OOM limits
 pub mod db;
 pub mod manager;
 pub mod metrics;

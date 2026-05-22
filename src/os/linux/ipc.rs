@@ -1,3 +1,26 @@
+//! # Linux IPC — Unix Domain Socket
+//!
+//! Implements the three IPC types for Linux using a **Unix domain socket**
+//! at [`SOCKET_PATH`] (`/tmp/rpm.sock`).
+//!
+//! ## Protocol
+//!
+//! Both the client and server exchange **newline-delimited JSON** frames:
+//!
+//! ```text
+//! client ──► "{...command json...}\n" ──► daemon
+//! client ◄── "{...response json...}\n" ◄── daemon
+//! ```
+//!
+//! A single connection can carry multiple request/response pairs (keep-alive).
+//! The daemon reads until EOF; the client drops the connection when done.
+//!
+//! ## Types
+//!
+//! - [`IpcClient`] — used by the CLI to send a [`crate::ipc::messages::DaemonCommand`]
+//!   and await a [`crate::ipc::messages::DaemonResponse`].
+//! - [`IpcServer`] — used by the daemon; calls `bind()` once, then loops on `accept()`.
+//! - [`IpcConn`] — per-accepted-connection handle; reads commands and writes responses.
 use crate::ipc::messages::{DaemonCommand, DaemonResponse};
 use anyhow::Result;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};

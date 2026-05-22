@@ -1,3 +1,33 @@
+//! # Process Manager
+//!
+//! Owns all runtime state of managed processes and exposes async functions
+//! to start, stop, restart, and delete them.
+//!
+//! ## Key types
+//!
+//! | Type | Description |
+//! |------|-------------|
+//! | [`ManagedProcess`] | Live entry in the in-memory map — holds the [`tokio::process::Child`] handle, timing info, and a broadcast channel for attached stdout. |
+//! | [`ProcessConfig`] | Snapshot of user-supplied options used to (re-)spawn a process. Converted to [`crate::process::Process`] via [`ProcessConfig::to_process`]. |
+//! | [`ProcessMap`] | `Arc<Mutex<HashMap<u32, ManagedProcess>>>` — the central registry shared across every async task. |
+//! | [`LoadBalancerMap`] | `Arc<Mutex<HashMap<String, oneshot::Sender<()>>>>` — one entry per cluster app; sending on the channel shuts the load-balancer task down. |
+//!
+//! ## Cluster mode
+//!
+//! When `mode == "cluster"` and a `port` is given, `start()` spawns *N*
+//! worker instances each listening on a private ephemeral port (`PORT` env
+//! var), then launches [`start_load_balancer`] which accepts public TCP
+//! connections and proxies them to workers using either **round-robin**
+//! (default) or **least-loaded** (by CPU + memory score) strategy.
+//!
+//! ```text
+//!  Internet ──► :public_port (load balancer)
+//!                    │ round-robin / least-loaded
+//!          ┌─────────┼─────────┐
+//!          ▼         ▼         ▼
+//!       worker-0  worker-1  worker-2
+//!      :ephemeral :ephemeral :ephemeral
+//! ```
 use crate::process::{Process, ProcessStatus};
 use anyhow::Result;
 use std::collections::HashMap;

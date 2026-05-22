@@ -1,3 +1,29 @@
+//! # Process
+//!
+//! Core data model for a managed process.
+//!
+//! [`Process`] is the single source of truth that flows between every layer of
+//! rpm: the daemon stores it in SQLite, the monitor updates its live metrics,
+//! the IPC layer serialises it to JSON, and both the CLI and TUI render it to
+//! the user.
+//!
+//! ## Lifecycle
+//!
+//! ```text
+//! rpm start …
+//!    │
+//!    ▼
+//! ProcessConfig  ──► Process { status: Stopped }
+//!    │                          │
+//!    │ manager::start()         │ child spawned
+//!    │                          ▼
+//!    └──────────────► Process { status: Online, pid: Some(…) }
+//!                               │
+//!                    monitor    │ crash / rpm stop
+//!                               ▼
+//!                    Process { status: Stopped, pid: None }
+//! ```
+
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 

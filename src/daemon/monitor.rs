@@ -1,3 +1,20 @@
+//! # Process Monitor
+//!
+//! Background task (polling every **2 seconds**) that:
+//!
+//! 1. **Detects crashes** — calls [`tokio::process::Child::try_wait`] on every
+//!    live child. If the process has exited it marks it `Stopped` and, if
+//!    `watching == true`, immediately calls [`manager::restart`].
+//!
+//! 2. **Enforces OOM limits** — if a process has `max_memory` set and its
+//!    resident-set size exceeds the limit, the monitor restarts it and logs a
+//!    message to stderr.
+//!
+//! 3. **Updates uptime** — recalculates `process.uptime` from `started_at`.
+//!
+//! Memory readings on Linux come from `/proc/<pid>/status` (`VmRSS` field)
+//! which reports the resident set size in kilobytes; the value is multiplied
+//! by 1024 to convert to bytes before being stored in [`crate::process::Process::mem`].
 use super::manager::{self, ProcessMap};
 use crate::process::ProcessStatus;
 use std::time::Duration;
