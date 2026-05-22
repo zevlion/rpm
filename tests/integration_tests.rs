@@ -14,11 +14,15 @@ fn send_request(port: u16, msg: &str) -> Result<String, std::io::Error> {
 
 fn clean_state() {
     let _ = Command::new("target/debug/rpm").arg("kill").output();
+    // Remove DB from all possible locations
+    let _ = std::fs::remove_file("target/debug/rpm.db");
+    let _ = std::fs::remove_file("rpm.db");
     if let Ok(exe) = std::env::current_exe()
-        && let Some(parent) = exe.parent() {
-            let _ = std::fs::remove_file(parent.join("rpm.db"));
-        }
-    thread::sleep(Duration::from_millis(1000));
+        && let Some(parent) = exe.parent()
+    {
+        let _ = std::fs::remove_file(parent.join("rpm.db"));
+    }
+    thread::sleep(Duration::from_millis(1500)); // bump from 1000ms
 }
 
 fn test_cli_basic_flow() {
@@ -36,7 +40,7 @@ fn test_cli_basic_flow() {
         .arg("--watch")
         .output()
         .expect("Failed to start fork process");
-    
+
     assert!(start_output.status.success());
     thread::sleep(Duration::from_millis(1500));
 
@@ -130,8 +134,11 @@ apps:
         .arg(yaml_path)
         .output()
         .expect("Failed to start app with config");
-    
-    println!("Start output: {}", String::from_utf8_lossy(&start_output.stdout));
+
+    println!(
+        "Start output: {}",
+        String::from_utf8_lossy(&start_output.stdout)
+    );
 
     // Sleep to allow daemon to spawn workers and load balancer to bind
     thread::sleep(Duration::from_millis(2500));
@@ -150,7 +157,11 @@ apps:
     let mut unique_pids = pids.clone();
     unique_pids.sort();
     unique_pids.dedup();
-    assert_eq!(unique_pids.len(), 2, "Expected exactly 2 worker processes running");
+    assert_eq!(
+        unique_pids.len(),
+        2,
+        "Expected exactly 2 worker processes running"
+    );
 
     // Verify round robin alternation
     assert_ne!(pids[0], pids[1], "PIDs should alternate");
@@ -187,24 +198,29 @@ apps:
         let resp = send_request(9876, "hello").expect("Failed to connect to LB after failover");
         let pid_part = resp.split("pid").nth(1).unwrap_or("").trim();
         let pid: u32 = pid_part.parse().unwrap();
-        assert_eq!(pid, pid_to_keep, "Should only route to the surviving worker");
+        assert_eq!(
+            pid, pid_to_keep,
+            "Should only route to the surviving worker"
+        );
     }
 
     // 6. Test memory limit auto-restart
-    let alloc_resp = send_request(9876, "allocate_memory").expect("Failed to send allocate memory command");
+    let alloc_resp =
+        send_request(9876, "allocate_memory").expect("Failed to send allocate memory command");
     println!("Alloc response: {}", alloc_resp.trim());
 
     // Sleep to let the daemon monitor check memory and restart it
     thread::sleep(Duration::from_millis(3500));
 
     // Verify that the worker has been restarted with a new PID
-    let new_resp = send_request(9876, "hello").expect("Failed to connect to LB after memory restart");
+    let new_resp =
+        send_request(9876, "hello").expect("Failed to connect to LB after memory restart");
     println!("New response after memory restart: {}", new_resp.trim());
     let new_pid_part = new_resp.split("pid").nth(1).unwrap_or("").trim();
     let new_pid: u32 = new_pid_part.parse().unwrap();
 
     assert_ne!(new_pid, pid_to_keep, "Should have a new PID after restart");
-    
+
     // Check that restarts counter is incremented
     let ls_output2 = Command::new("target/debug/rpm")
         .arg("ls")
@@ -242,7 +258,7 @@ fn test_cli_least_loaded() {
         .arg("500MB")
         .output()
         .expect("Failed to start cluster app");
-    
+
     assert!(start_output.status.success());
     thread::sleep(Duration::from_millis(3000));
 
@@ -254,7 +270,8 @@ fn test_cli_least_loaded() {
     let pid_a: u32 = parts_a[5].parse().expect("Failed to parse pid");
 
     // 4. Send memory allocation command to Worker A directly
-    let alloc_resp = send_request(port_a, "allocate_memory").expect("Failed to allocate memory on worker A");
+    let alloc_resp =
+        send_request(port_a, "allocate_memory").expect("Failed to allocate memory on worker A");
     assert!(alloc_resp.contains(&pid_a.to_string()));
 
     // 5. Sleep to let the daemon monitor poll memory stats (interval is 2s)
@@ -275,7 +292,10 @@ fn test_cli_least_loaded() {
         let resp = send_request(9877, "hello").expect("Failed to connect to LB");
         let parts: Vec<&str> = resp.split_whitespace().collect();
         let routed_pid: u32 = parts[5].trim().parse().expect("Failed to parse routed pid");
-        assert_eq!(routed_pid, pid_b, "Should route exclusively to the less loaded worker");
+        assert_eq!(
+            routed_pid, pid_b,
+            "Should route exclusively to the less loaded worker"
+        );
     }
 
     // Clean up
@@ -302,7 +322,7 @@ fn test_cluster_lifecycle() {
         .arg("9879")
         .output()
         .expect("Failed to start cluster app");
-    
+
     assert!(start_output.status.success());
     thread::sleep(Duration::from_millis(3000));
 
@@ -364,7 +384,10 @@ fn test_cluster_lifecycle() {
 
     // Verify load balancer port 9879 is released and connections fail
     let conn_res = send_request(9879, "hello");
-    assert!(conn_res.is_err(), "Expected connection to load balancer to fail after stop");
+    assert!(
+        conn_res.is_err(),
+        "Expected connection to load balancer to fail after stop"
+    );
 
     // 7. Delete the application
     let delete_output = Command::new("target/debug/rpm")
@@ -414,7 +437,7 @@ fn test_attach_ctrlc() {
     let mut reader = std::io::BufReader::new(stdout);
     let mut found = false;
     let mut line = String::new();
-    
+
     use std::io::BufRead;
     for _ in 0..100 {
         line.clear();
@@ -431,7 +454,10 @@ fn test_attach_ctrlc() {
         thread::sleep(Duration::from_millis(50));
     }
 
-    assert!(found, "Did not find expected mock server start output in stdout");
+    assert!(
+        found,
+        "Did not find expected mock server start output in stdout"
+    );
 
     // 4. Send SIGINT (2) to the child (simulating CTRL-C)
     let pid = child.id();
@@ -457,11 +483,15 @@ fn test_attach_ctrlc() {
     assert!(ls_str.contains("online"));
 
     // 6. Connect to port 9880 to verify it's still running and responding
-    let resp = send_request(9880, "hello").expect("Failed to connect to background server after detach");
+    let resp =
+        send_request(9880, "hello").expect("Failed to connect to background server after detach");
     assert!(resp.contains("pid"));
 
     // 7. Clean up
-    let _ = Command::new("target/debug/rpm").arg("delete").arg("test-attach-ctrlc").output();
+    let _ = Command::new("target/debug/rpm")
+        .arg("delete")
+        .arg("test-attach-ctrlc")
+        .output();
     let _ = Command::new("target/debug/rpm").arg("kill").output();
 }
 
@@ -478,7 +508,8 @@ struct ProcLsEntry {
 fn parse_ls_output(output: &str) -> Vec<ProcLsEntry> {
     let mut entries = Vec::new();
     for line in output.lines() {
-        if !line.starts_with('│') || line.contains("no processes running") || line.contains(" id ") {
+        if !line.starts_with('│') || line.contains("no processes running") || line.contains(" id ")
+        {
             continue;
         }
         let parts: Vec<&str> = line.split('│').collect();
@@ -490,7 +521,14 @@ fn parse_ls_output(output: &str) -> Vec<ProcLsEntry> {
             let status = parts[8].trim().to_string();
             let restarts = parts[10].trim().parse::<u32>();
             if let (Ok(id), Ok(restarts)) = (id, restarts) {
-                entries.push(ProcLsEntry { id, name, mode, pid, status, restarts });
+                entries.push(ProcLsEntry {
+                    id,
+                    name,
+                    mode,
+                    pid,
+                    status,
+                    restarts,
+                });
             }
         }
     }
@@ -546,7 +584,11 @@ fn test_cli_id_reset_and_reuse() {
         .expect("Failed to try to start proc-a again");
     let err_str = String::from_utf8_lossy(&start_err_output.stderr);
     let out_str = String::from_utf8_lossy(&start_err_output.stdout);
-    assert!(err_str.contains("already running") || out_str.contains("already running") || err_str.contains("already exists"));
+    assert!(
+        err_str.contains("already running")
+            || out_str.contains("already running")
+            || err_str.contains("already exists")
+    );
 
     // 4. Start proc-a again with --force (should keep ID 0)
     let force_output = Command::new("target/debug/rpm")
@@ -823,7 +865,7 @@ fn test_cli_restart_all() {
     assert_eq!(entries2.len(), 2);
     let a_new = entries2.iter().find(|e| e.name == "proc-a").unwrap();
     let b_new = entries2.iter().find(|e| e.name == "proc-b").unwrap();
-    
+
     assert!(a_new.pid.is_some());
     assert!(b_new.pid.is_some());
     assert_ne!(a_new.pid, pid_a);
