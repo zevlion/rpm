@@ -1,12 +1,6 @@
 {
   "name": "rpm",
   "image": "mcr.microsoft.com/devcontainers/rust:1-bookworm",
-  "remoteEnv": {
-    "LOCAL_WORKSPACE_FOLDER": "${localWorkspaceFolder}"
-  },
-  "mounts": [
-    "source=${localEnv:HOME}/.gitconfig,target=/root/.gitconfig,type=bind,consistency=cached"
-  ],
   "customizations": {
     "vscode": {
       "extensions": [
@@ -29,5 +23,4 @@
     }
   },
   "postCreateCommand": "rustup component add clippy rustfmt && cargo install cargo-bloat",
-  "remoteUser": "root"
 }
