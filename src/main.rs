@@ -8,7 +8,7 @@ use anyhow::Result;
 use ipc::IpcClient;
 use ipc::messages::DaemonCommand;
 
-#[tokio::main]
+#[tokio::main(name= "rpm")]
 async fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
 
@@ -26,7 +26,7 @@ async fn main() -> Result<()> {
             uninstall().await?;
         }
 
-        Some("--update") => {
+        Some("--update" | "-update" | "--upgrade") => {
             update().await?;
         }
 
