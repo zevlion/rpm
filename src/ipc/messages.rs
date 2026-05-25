@@ -19,7 +19,6 @@
 //! `DaemonResponse::Ok` followed by zero-or-more `Line` frames and a final
 //! `Eof` frame.
 
-use crate::process::Process;
 //! # IPC Messages
 //!
 //! Types exchanged over the IPC channel. Both sides communicate via newline‑delimited
@@ -31,6 +30,10 @@ use crate::process::Process;
 //! These types derive `Serialize` / `Deserialize` so they can be turned into JSON
 //! with `serde_json`.  Keeping the definitions in a dedicated module isolates the
 //! protocol from the transport implementation (`ipc::mod`).
+//!
+
+use crate::process::Process;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type")]
