@@ -1,7 +1,7 @@
 //! # Linux IPC — Unix Domain Socket
 //!
-//! Implements the three IPC types for Linux using a **Unix domain socket**
-//! at [`SOCKET_PATH`] (`/tmp/rpm.sock`).
+//! Implements the three IPC types for Linux using a dynamic **Unix domain socket**
+//! path scoped to the effective user ID to prevent container and environment collision.
 //!
 //! ## Protocol
 //!
@@ -21,12 +21,16 @@
 //!   and await a [`crate::ipc::messages::DaemonResponse`].
 //! - [`IpcServer`] — used by the daemon; calls `bind()` once, then loops on `accept()`.
 //! - [`IpcConn`] — per-accepted-connection handle; reads commands and writes responses.
+
 use crate::ipc::messages::{DaemonCommand, DaemonResponse};
 use anyhow::Result;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{UnixListener, UnixStream};
 
-pub const SOCKET_PATH: &str = "/tmp/rpm.sock";
+pub fn get_socket_path() -> String {
+    let uid = unsafe { libc::getuid() };
+    format!("/tmp/rpm_{}.sock", uid)
+}
 
 // ── client ────────────────────────────────────────────────────────────────────
 
@@ -37,7 +41,8 @@ pub struct IpcClient {
 
 impl IpcClient {
     pub async fn connect() -> Result<Self> {
-        let stream = UnixStream::connect(SOCKET_PATH).await?;
+        let socket_path = get_socket_path();
+        let stream = UnixStream::connect(&socket_path).await?;
         let (r, w) = stream.into_split();
         Ok(Self {
             reader: BufReader::new(r),
@@ -71,9 +76,10 @@ pub struct IpcServer {
 
 impl IpcServer {
     pub fn bind() -> Result<Self> {
-        let _ = std::fs::remove_file(SOCKET_PATH);
+        let socket_path = get_socket_path();
+        let _ = std::fs::remove_file(&socket_path);
         Ok(Self {
-            listener: UnixListener::bind(SOCKET_PATH)?,
+            listener: UnixListener::bind(&socket_path)?,
         })
     }
 
