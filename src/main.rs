@@ -8,8 +8,6 @@ use anyhow::Result;
 use ipc::IpcClient;
 use ipc::messages::DaemonCommand;
 
-use crate::os::ipc::get_socket_path;
-
 #[tokio::main]
 async fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
@@ -178,12 +176,14 @@ async fn ensure_daemon() -> Result<IpcClient> {
         return Ok(client);
     }
 
-    // Resolve the precise user-keyed dynamic path matching ipc.rs
-    let socket_path = get_socket_path();
-    let _ = std::fs::remove_file(&socket_path);
+    #[cfg(target_os = "linux")]
+    {
+        let uid = unsafe { libc::getuid() };
+        let socket_path = format!("/tmp/rpm_{}.sock", uid);
+        let _ = std::fs::remove_file(&socket_path);
+    }
 
-    let current_exe = std::env::current_exe()?;
-    let mut cmd = tokio::process::Command::new(&current_exe);
+    let mut cmd = tokio::process::Command::new(std::env::current_exe()?);
     cmd.arg("__daemon")
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
@@ -191,7 +191,6 @@ async fn ensure_daemon() -> Result<IpcClient> {
 
     #[cfg(unix)]
     {
-        // Safe environmental fallback invocation check
         if std::env::var("REMOTE_CONTAINERS").is_err() && std::env::var("CODESPACES").is_err() {
             cmd.process_group(0);
         }
@@ -208,6 +207,7 @@ async fn ensure_daemon() -> Result<IpcClient> {
 
     anyhow::bail!("daemon failed to start within 2s");
 }
+
 // --- YAML & Memory Limits Helper ---
 
 #[derive(serde::Deserialize, Debug)]
