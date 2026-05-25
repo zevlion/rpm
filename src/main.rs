@@ -8,6 +8,8 @@ use anyhow::Result;
 use ipc::IpcClient;
 use ipc::messages::DaemonCommand;
 
+use crate::os::ipc::get_socket_path;
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
@@ -36,13 +38,13 @@ async fn main() -> Result<()> {
             if path_or_cmd.ends_with(".yaml") || path_or_cmd.ends_with(".yml") {
                 let file_content = std::fs::read_to_string(path_or_cmd)?;
                 let config: YamlConfig = serde_yaml::from_str(&file_content)?;
-                
+
                 for app in config.apps {
                     let max_mem_bytes = match app.max_memory {
                         Some(ref m) => Some(parse_memory_limit(m)?),
                         None => None,
                     };
-                    
+
                     let res = client
                         .send(DaemonCommand::Start {
                             name: app.name,
@@ -176,14 +178,24 @@ async fn ensure_daemon() -> Result<IpcClient> {
         return Ok(client);
     }
 
-    let mut cmd = tokio::process::Command::new(std::env::current_exe()?);
+    // Resolve the precise user-keyed dynamic path matching ipc.rs
+    let socket_path = get_socket_path();
+    let _ = std::fs::remove_file(&socket_path);
+
+    let current_exe = std::env::current_exe()?;
+    let mut cmd = tokio::process::Command::new(&current_exe);
     cmd.arg("__daemon")
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null());
 
     #[cfg(unix)]
-    cmd.process_group(0);
+    {
+        // Safe environmental fallback invocation check
+        if std::env::var("REMOTE_CONTAINERS").is_err() && std::env::var("CODESPACES").is_err() {
+            cmd.process_group(0);
+        }
+    }
 
     cmd.spawn()?;
 
@@ -196,7 +208,6 @@ async fn ensure_daemon() -> Result<IpcClient> {
 
     anyhow::bail!("daemon failed to start within 2s");
 }
-
 // --- YAML & Memory Limits Helper ---
 
 #[derive(serde::Deserialize, Debug)]
@@ -321,13 +332,25 @@ fn parse_start(args: &[String]) -> Result<StartOpts> {
             }
             "--instances" => {
                 i += 1;
-                let val_str = args.get(i).ok_or(anyhow::anyhow!("--instances requires a value"))?;
-                instances = Some(val_str.parse::<u32>().map_err(|_| anyhow::anyhow!("invalid instances value"))?);
+                let val_str = args
+                    .get(i)
+                    .ok_or(anyhow::anyhow!("--instances requires a value"))?;
+                instances = Some(
+                    val_str
+                        .parse::<u32>()
+                        .map_err(|_| anyhow::anyhow!("invalid instances value"))?,
+                );
             }
             "--port" => {
                 i += 1;
-                let val_str = args.get(i).ok_or(anyhow::anyhow!("--port requires a value"))?;
-                port = Some(val_str.parse::<u16>().map_err(|_| anyhow::anyhow!("invalid port value"))?);
+                let val_str = args
+                    .get(i)
+                    .ok_or(anyhow::anyhow!("--port requires a value"))?;
+                port = Some(
+                    val_str
+                        .parse::<u16>()
+                        .map_err(|_| anyhow::anyhow!("invalid port value"))?,
+                );
             }
             "--lb-strategy" => {
                 i += 1;
@@ -339,13 +362,21 @@ fn parse_start(args: &[String]) -> Result<StartOpts> {
             }
             "--max-memory" => {
                 i += 1;
-                let val_str = args.get(i).ok_or(anyhow::anyhow!("--max-memory requires a value"))?;
+                let val_str = args
+                    .get(i)
+                    .ok_or(anyhow::anyhow!("--max-memory requires a value"))?;
                 max_memory = Some(parse_memory_limit(val_str)?);
             }
             "--max-cpu" => {
                 i += 1;
-                let val_str = args.get(i).ok_or(anyhow::anyhow!("--max-cpu requires a value"))?;
-                max_cpu = Some(val_str.parse::<f32>().map_err(|_| anyhow::anyhow!("invalid max-cpu value"))?);
+                let val_str = args
+                    .get(i)
+                    .ok_or(anyhow::anyhow!("--max-cpu requires a value"))?;
+                max_cpu = Some(
+                    val_str
+                        .parse::<f32>()
+                        .map_err(|_| anyhow::anyhow!("invalid max-cpu value"))?,
+                );
             }
             arg => {
                 if cmd.is_empty() {
