@@ -73,10 +73,6 @@ impl IpcServer {
             writer: w,
         })
     }
-
-    pub fn cleanup(&self) {
-        // Named pipes are cleaned up automatically by Windows when handles close.
-    }
 }
 
 pub struct IpcConn {
