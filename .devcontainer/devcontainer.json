@@ -1,6 +1,14 @@
 {
   "name": "rpm",
-  "image": "mcr.microsoft.com/devcontainers/rust:1-bookworm",
+  "image": "mcr.microsoft.com/devcontainers/rust:1",
+  "features": {
+    "ghcr.io/devcontainers/features/rust:1": {
+      "version": "nightly",
+      "profile": "default",
+      "targets": "",
+      "components": "clippy,rustfmt"
+    }
+  },
   "customizations": {
     "vscode": {
       "extensions": [
@@ -21,6 +29,5 @@
         ]
       }
     }
-  },
-  "postCreateCommand": "rustup component add clippy rustfmt && cargo install cargo-bloat",
+  }
 }

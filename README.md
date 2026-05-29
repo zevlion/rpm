@@ -7,21 +7,25 @@ A lightweight native process manager. Single binary, zero runtime overhead, no N
 ## Installation
 
 #### Linux
+
 ```bash
 curl -fsSL "https://raw.githubusercontent.com/zevlion/rpm/refs/heads/master/scripts/linux-installer.sh?$(date +%s)" | bash
 ```
 
 #### macOS
+
 ```bash
 curl -fsSL "https://raw.githubusercontent.com/zevlion/rpm/refs/heads/master/scripts/macos-installer.sh?$(date +%s)" | bash
 ```
 
 #### Windows
+
 ```powershell
 irm "https://raw.githubusercontent.com/zevlion/rpm/refs/heads/master/scripts/windows-installer.ps1" | iex
 ```
 
 Or with a custom install directory:
+
 ```powershell
 .\windows-installer.ps1 -InstallDir "C:\Program Files\rpm"
 ```
@@ -30,12 +34,12 @@ Or with a custom install directory:
 
 ## Platform Support
 
-| Platform       | IPC Transport         | Architecture        |
-|----------------|-----------------------|---------------------|
-| Linux          | Unix socket           | x86_64, arm64       |
-| macOS          | Unix socket           | x86_64, arm64 (M1+) |
-| Windows        | Named pipe            | x86_64              |
-| Android        | Abstract Unix socket  | arm64               |
+| Platform | IPC Transport        | Architecture        |
+| -------- | -------------------- | ------------------- |
+| Linux    | Unix socket          | x86_64, arm64       |
+| macOS    | Unix socket          | x86_64, arm64 (M1+) |
+| Windows  | Named pipe           | x86_64              |
+| Android  | Abstract Unix socket | arm64               |
 
 ---
 
@@ -93,7 +97,7 @@ On first use, rpm spawns a background daemon and connects to it via a platform-n
 
 ## Building from Source
 
-Requires [Rust](https://rustup.rs) 1.85 or later.
+Requires [Rust](https://rustup.rs) 1.96.0 or later.
 
 ```bash
 git clone https://github.com/zevlion/rpm

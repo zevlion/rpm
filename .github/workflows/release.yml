@@ -1,127 +1,127 @@
 name: release
 
 on:
-    push:
-        branches:
-            - master
+  push:
+    branches:
+      - master
 
 jobs:
-    build:
-        name: build (${{ matrix.target }})
-        runs-on: ${{ matrix.os }}
+  build:
+    name: build (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
 
-        permissions:
-            contents: write
+    permissions:
+      contents: write
 
-        strategy:
-            fail-fast: false
-            matrix:
-                include:
-                    - os: ubuntu-latest
-                      target: x86_64-unknown-linux-gnu
-                      asset_name: rpm
-                      compress: true
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            asset_name: rpm
+            compress: true
 
-                    - os: macos-latest
-                      target: x86_64-apple-darwin
-                      asset_name: rpm-macos-x86_64
-                      compress: false
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            asset_name: rpm-macos-x86_64
+            compress: false
 
-                    - os: macos-latest
-                      target: aarch64-apple-darwin
-                      asset_name: rpm-macos-arm64
-                      compress: false
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            asset_name: rpm-macos-arm64
+            compress: false
 
-                    - os: windows-latest
-                      target: x86_64-pc-windows-msvc
-                      asset_name: rpm.exe
-                      compress: false
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            asset_name: rpm.exe
+            compress: false
 
-        steps:
-            - name: checkout
-              uses: actions/checkout@v4
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
 
-            - name: install rust
-              uses: dtolnay/rust-toolchain@stable
-              with:
-                  targets: ${{ matrix.target }}
+      - name: install rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
 
-            - name: cache
-              uses: Swatinem/rust-cache@v2
-              with:
-                  key: ${{ matrix.target }}
+      - name: cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
 
-            - name: install cross-compile tools (linux)
-              if: matrix.os == 'ubuntu-latest'
-              run: |
-                  sudo apt-get update -q
-                  sudo apt-get install -y upx
+      - name: install cross-compile tools (linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y upx
 
-            - name: build
-              run: cargo build --release --target ${{ matrix.target }}
+      - name: build
+        run: cargo build --release --target ${{ matrix.target }}
 
-            - name: compress binary (linux only)
-              if: matrix.compress == true
-              run: upx --best --lzma target/${{ matrix.target }}/release/rpm
+      - name: compress binary (linux only)
+        if: matrix.compress == true
+        run: upx --best --lzma target/${{ matrix.target }}/release/rpm
 
-            - name: stage artifact (unix)
-              if: matrix.os != 'windows-latest'
-              run: |
-                  cp target/${{ matrix.target }}/release/rpm ${{ matrix.asset_name }}
+      - name: stage artifact (unix)
+        if: matrix.os != 'windows-latest'
+        run: |
+          cp target/${{ matrix.target }}/release/rpm ${{ matrix.asset_name }}
 
-            - name: stage artifact (windows)
-              if: matrix.os == 'windows-latest'
-              shell: pwsh
-              run: |
-                  Copy-Item "target/${{ matrix.target }}/release/rpm.exe" "${{ matrix.asset_name }}"
+      - name: stage artifact (windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          Copy-Item "target/${{ matrix.target }}/release/rpm.exe" "${{ matrix.asset_name }}"
 
-            - name: upload artifact
-              uses: actions/upload-artifact@v4
-              with:
-                  name: ${{ matrix.asset_name }}
-                  path: ${{ matrix.asset_name }}
-                  retention-days: 1
+      - name: upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset_name }}
+          path: ${{ matrix.asset_name }}
+          retention-days: 1
 
-    release:
-        name: publish release
-        needs: build
-        runs-on: ubuntu-latest
+  release:
+    name: publish release
+    needs: build
+    runs-on: ubuntu-latest
 
-        permissions:
-            contents: write
+    permissions:
+      contents: write
 
-        steps:
-            - name: checkout
-              uses: actions/checkout@v4
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
 
-            - name: download all artifacts
-              uses: actions/download-artifact@v4
-              with:
-                  path: artifacts
-                  merge-multiple: true
+      - name: download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
 
-            - name: get commit info
-              id: commit
-              run: |
-                  echo "sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
-                  echo "msg=$(git log -1 --pretty=%s)" >> $GITHUB_OUTPUT
+      - name: get commit info
+        id: commit
+        run: |
+          echo "sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+          echo "msg=$(git log -1 --pretty=%s)" >> $GITHUB_OUTPUT
 
-            - name: delete existing release
-              env:
-                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-              run: |
-                  gh release delete latest --yes 2>/dev/null || true
-                  git push origin :refs/tags/latest 2>/dev/null || true
+      - name: delete existing release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release delete latest --yes 2>/dev/null || true
+          git push origin :refs/tags/latest 2>/dev/null || true
 
-            - name: create release
-              env:
-                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-              run: |
-                  gh release create latest \
-                    artifacts/rpm \
-                    artifacts/rpm-macos-x86_64 \
-                    artifacts/rpm-macos-arm64 \
-                    artifacts/rpm.exe \
-                    --title "rpm — ${{ steps.commit.outputs.sha }}" \
-                    --notes "${{ steps.commit.outputs.msg }}" \
-                    --latest
+      - name: create release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create latest \
+            artifacts/rpm \
+            artifacts/rpm-macos-x86_64 \
+            artifacts/rpm-macos-arm64 \
+            artifacts/rpm.exe \
+            --title "rpm — ${{ steps.commit.outputs.sha }}" \
+            --notes "${{ steps.commit.outputs.msg }}" \
+            --latest
