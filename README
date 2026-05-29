@@ -1,0 +1,3 @@
+RPM is a lightweight process manager with a platform-native IPC daemon, supporting Linux, macOS, Windows, and Android. It manages processes via a persistent background daemon and stores metadata in a local SQLite database.
+
+More documentation at https://github.com/zevlion/rpm/docs/README.md
