@@ -1,8 +1,4 @@
-# rpm — Process Manager
-
-A lightweight native process manager. Single binary, zero runtime overhead, no Node.js required.
-
----
+# Process Manager
 
 ## Installation
 
@@ -30,8 +26,6 @@ Or with a custom install directory:
 .\windows-installer.ps1 -InstallDir "C:\Program Files\rpm"
 ```
 
----
-
 ## Platform Support
 
 | Platform | IPC Transport        | Architecture        |
@@ -41,7 +35,6 @@ Or with a custom install directory:
 | Windows  | Named pipe           | x86_64              |
 | Android  | Abstract Unix socket | arm64               |
 
----
 
 ## Commands
 
@@ -58,8 +51,6 @@ rpm --uninstall           # remove rpm from the system
 rpm --version             # print version
 ```
 
----
-
 ## Start Flags
 
 ```bash
@@ -69,8 +60,6 @@ rpm --version             # print version
 -i, --interpreter <bin>    # interpreter e.g. node, python3
     --force                # restart if already running
 ```
-
----
 
 ## Examples
 
@@ -87,13 +76,9 @@ rpm --update
 rpm --uninstall
 ```
 
----
-
 ## How It Works
 
 On first use, rpm spawns a background daemon and connects to it via a platform-native IPC channel (Unix socket on Linux/macOS, named pipe on Windows). Subsequent CLI invocations connect to the already-running daemon — startup is instant. Process metadata is persisted to a local SQLite database so the process list survives daemon restarts.
-
----
 
 ## Building from Source
 
